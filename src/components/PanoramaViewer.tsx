@@ -1,20 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { RotateCcw, ZoomIn, ZoomOut, Move } from "lucide-react";
+import { RotateCcw, ZoomIn, ZoomOut, Loader, X, Info, Maximize } from "lucide-react";
+import { ReactPhotoSphereViewer } from "react-photo-sphere-viewer";
+import "photo-sphere-viewer/dist/photo-sphere-viewer.css";
 
 interface Location {
   name: string;
   id: string;
   imageUrl: string;
   description?: string;
+  coordinates?: { lat: number; lng: number };
+  features?: string[];
 }
 
 const locations: Location[] = [
   {
     name: "Site A - Main Plaza",
     id: "site-a",
-    imageUrl:
-      "https://placehold.co/2000x1000/1e40af/white?text=Main+Plaza+Panorama+360%C2%B0+View",
+    imageUrl: "/Panorama.jpg",
     description: "Central gathering area with emergency exits marked",
+    coordinates: { lat: 13.1388, lng: 123.7336 },
+    features: ["Emergency Exits", "First Aid Stations", "Communication Hub"]
   },
   {
     name: "Site B - Emergency Center",
@@ -22,6 +27,8 @@ const locations: Location[] = [
     imageUrl:
       "https://placehold.co/2000x1000/7e22ce/white?text=Emergency+Center+Operations+Room",
     description: "Command and control hub for emergency response",
+    coordinates: { lat: 13.1400, lng: 123.7350 },
+    features: ["Control Room", "Radio Equipment", "Backup Power"]
   },
   {
     name: "Site C - Evacuation Point",
@@ -29,135 +36,122 @@ const locations: Location[] = [
     imageUrl:
       "https://placehold.co/2000x1000/0d9488/white?text=Evacuation+Point+Assembly+Area",
     description: "Designated safe zone for personnel assembly",
+    coordinates: { lat: 13.1375, lng: 123.7320 },
+    features: ["Shelter Area", "Water Supply", "Medical Tent"]
   },
 ];
 
 export default function PanoramaViewer() {
-  const [selectedLocation, setSelectedLocation] = useState<string>(
-    locations[0].id,
-  );
+  const [selectedLocation, setSelectedLocation] = useState<string>(locations[0].id);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState<boolean>(true);
+  const [showDetails, setShowDetails] = useState<boolean>(false);
+  const [zoomLevel, setZoomLevel] = useState<number>(50);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  // Transform state
-  const [zoom, setZoom] = useState<number>(1.2);
-  const [offset, setOffset] = useState<{ x: number; y: number }>({
-    x: 0,
-    y: 0,
-  });
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const pointerRef = useRef<{
-    id: number | null;
-    lastX: number;
-    lastY: number;
-  }>({ id: null, lastX: 0, lastY: 0 });
+  const viewerRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const currentLocation = locations.find((l) => l.id === selectedLocation)!;
 
-  useEffect(() => {
-    // Reset state when location changes
-    setIsLoading(true);
+  const handleViewerReady = (viewer: any) => {
+    viewerRef.current = viewer;
+    setIsLoading(false);
     setError(null);
-    setZoom(1.2);
-    setOffset({ x: 0, y: 0 });
-    setIsDragging(false);
-  }, [selectedLocation]);
-
-  const clampOffset = (x: number, y: number) => {
-    const container = containerRef.current;
-    const img = imgRef.current;
-    if (!container || !img) return { x, y };
-
-    const cRect = container.getBoundingClientRect();
-    const maxX = Math.max(0, (img.naturalWidth * zoom - cRect.width) / 2);
-    const maxY = Math.max(0, (img.naturalHeight * zoom - cRect.height) / 2);
-
-    const clamp = (v: number, max: number) => Math.max(-max, Math.min(max, v));
-    return { x: clamp(x, maxX), y: clamp(y, maxY) };
-  };
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    (e.target as Element).setPointerCapture(e.pointerId);
-    pointerRef.current = {
-      id: e.pointerId,
-      lastX: e.clientX,
-      lastY: e.clientY,
-    };
-    setIsDragging(true);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (pointerRef.current.id !== e.pointerId) return;
-    const dx = e.clientX - pointerRef.current.lastX;
-    const dy = e.clientY - pointerRef.current.lastY;
-    pointerRef.current.lastX = e.clientX;
-    pointerRef.current.lastY = e.clientY;
-    setOffset((prev) => {
-      const next = { x: prev.x + dx, y: prev.y + dy };
-      return clampOffset(next.x, next.y);
+    
+    // Set up zoom level listener
+    viewer.on('zoom-updated', (e: any, zoom: number) => {
+      setZoomLevel(Math.round(zoom * 100));
     });
   };
 
-  const handlePointerUp = (e: React.PointerEvent) => {
-    try {
-      (e.target as Element).releasePointerCapture(e.pointerId);
-    } catch {}
-    pointerRef.current.id = null;
-    setIsDragging(false);
-  };
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = -e.deltaY / 500; // smooth zoom factor
-    setZoom((z) => {
-      const next = Math.max(1, Math.min(3, z + delta));
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    // Ensure offset stays valid when zoom changes
-    setOffset((o) => clampOffset(o.x, o.y));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoom]);
-
-  const onImgLoad = () => {
-    setIsLoading(false);
-  };
-
-  const onImgError = () => {
-    setIsLoading(false);
+  const handleViewerError = (error: any) => {
+    console.error("Panorama viewer error:", error);
     setError("Failed to load panorama image. Please try again.");
+    setIsLoading(false);
   };
 
-  const resetView = () => {
-    setZoom(1.2);
-    setOffset({ x: 0, y: 0 });
+  const handleZoomIn = () => {
+    if (viewerRef.current) {
+      const currentZoom = viewerRef.current.getZoomLevel?.();
+      if (currentZoom !== undefined) {
+        const newZoom = Math.min(100, currentZoom + 10);
+        viewerRef.current.setZoomLevel?.(newZoom);
+        setZoomLevel(Math.round(newZoom * 100));
+      }
+    }
   };
 
-  const zoomIn = () => {
-    setZoom((z) => Math.min(3, z + 0.2));
+  const handleZoomOut = () => {
+    if (viewerRef.current) {
+      const currentZoom = viewerRef.current.getZoomLevel?.();
+      if (currentZoom !== undefined) {
+        const newZoom = Math.max(0, currentZoom - 10);
+        viewerRef.current.setZoomLevel?.(newZoom);
+        setZoomLevel(Math.round(newZoom * 100));
+      }
+    }
   };
 
-  const zoomOut = () => {
-    setZoom((z) => Math.max(1, z - 0.2));
+  const handleResetView = () => {
+    if (viewerRef.current) {
+      viewerRef.current.setPitch?.(0);
+      viewerRef.current.setYaw?.(0);
+      viewerRef.current.setZoomLevel?.(50);
+      setZoomLevel(50);
+    }
   };
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  // Handle fullscreen change events
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   return (
-    <div className="w-full h-full bg-white/40 backdrop-blur-md rounded-3xl shadow-2xl p-6 border border-white/50 flex flex-col">
+    <div className="w-full h-full bg-gradient-to-br from-slate-50 to-blue-50/30 backdrop-blur-sm rounded-3xl shadow-2xl p-6 border border-white/50 flex flex-col">
       <div className="mb-4">
-        <label className="block text-[#1a1a2e] font-semibold mb-2 text-sm">
-          Select Location:
-        </label>
+        <div className="flex justify-between items-center mb-2">
+          <label className="block text-[#1a1a2e] font-semibold text-sm">
+            Select Location:
+          </label>
+          <button 
+            onClick={() => setShowDetails(!showDetails)}
+            className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            <Info size={14} />
+            Details
+          </button>
+        </div>
+        
         <div className="relative">
           <select
             value={selectedLocation}
             onChange={(e) => setSelectedLocation(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-white/80 border-2 border-white/60 shadow-lg focus:outline-none focus:ring-2 focus:ring-sky-400 text-gray-700 font-medium transition-all appearance-none"
+            className="w-full px-4 py-3 rounded-xl bg-white/90 border-2 border-white/60 shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 font-medium transition-all appearance-none pr-10"
             disabled={isLoading}
           >
             {locations.map((location) => (
@@ -184,14 +178,56 @@ export default function PanoramaViewer() {
         </div>
       </div>
 
-      <div
-        className="flex-1 rounded-2xl overflow-hidden shadow-inner bg-gray-900 relative"
-        onWheel={handleWheel}
+      {/* Location Details Panel */}
+      {showDetails && (
+        <div className="mb-4 bg-white/80 rounded-xl p-4 shadow-inner border border-white">
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="font-bold text-gray-800">{currentLocation.name}</h3>
+            <button 
+              onClick={() => setShowDetails(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          
+          {currentLocation.description && (
+            <p className="text-gray-600 text-sm mb-3">{currentLocation.description}</p>
+          )}
+          
+          {currentLocation.coordinates && (
+            <div className="flex items-center text-xs text-gray-500 mb-2">
+              <span className="font-medium mr-2">Coordinates:</span>
+              <span>{currentLocation.coordinates.lat}, {currentLocation.coordinates.lng}</span>
+            </div>
+          )}
+          
+          {currentLocation.features && (
+            <div>
+              <div className="text-xs font-semibold text-gray-700 mb-1">Key Features:</div>
+              <div className="flex flex-wrap gap-1">
+                {currentLocation.features.map((feature, index) => (
+                  <span 
+                    key={index} 
+                    className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                  >
+                    {feature}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div 
+        ref={containerRef}
+        className="flex-1 rounded-2xl overflow-hidden shadow-inner bg-gray-900 relative group"
       >
         {isLoading && (
           <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
             <div className="text-center">
-              <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <Loader className="w-16 h-16 text-blue-500 animate-spin mx-auto mb-4" />
               <p className="text-white font-medium text-lg">
                 Loading panorama view...
               </p>
@@ -211,7 +247,10 @@ export default function PanoramaViewer() {
               </h3>
               <p className="text-red-200 mb-6">{error}</p>
               <button
-                onClick={() => setSelectedLocation(selectedLocation)}
+                onClick={() => {
+                  setError(null);
+                  setIsLoading(true);
+                }}
                 className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all font-semibold shadow-lg"
               >
                 Try Again
@@ -220,116 +259,120 @@ export default function PanoramaViewer() {
           </div>
         )}
 
-        <div
-          ref={containerRef}
-          className="w-full h-full min-h-[400px] relative touch-none cursor-grab active:cursor-grabbing"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        >
-          <div className="absolute inset-0 overflow-hidden">
-            <img
-              ref={imgRef}
-              src={currentLocation.imageUrl}
-              alt={`${currentLocation.name} Panorama`}
-              onLoad={onImgLoad}
-              onError={onImgError}
-              style={{
-                transform: `scale(${zoom}) translate(${offset.x}px, ${offset.y}px)`,
-                transformOrigin: "center center",
-                transition: isLoading ? "none" : "transform 0.15s ease",
-              }}
-              className="w-full h-full object-cover will-change-transform select-none"
-              draggable={false}
-            />
+        <ReactPhotoSphereViewer
+          src={currentLocation.imageUrl}
+          height="100%"
+          width="100%"
+          onReady={handleViewerReady}
+          onError={handleViewerError}
+          options={{
+            navbar: false,
+            defaultZoomLvl: 50,
+            minZoomLvl: 10,
+            maxZoomLvl: 100,
+            autorotate: false,
+            mousewheel: true,
+            touchmove: true,
+          }}
+        />
 
-            {/* Enhanced overlay gradients */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none" />
-
-            {/* Top info panel */}
-            <div className="absolute top-4 left-4 right-4 bg-black/60 backdrop-blur-sm text-white px-4 py-3 rounded-xl z-10 shadow-lg">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-xl">{currentLocation.name}</h3>
-                  {currentLocation.description && (
-                    <p className="text-sm text-gray-300 mt-1">
-                      {currentLocation.description}
-                    </p>
-                  )}
-                </div>
-                <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-3 py-1 rounded-full text-xs font-bold">
-                  360° VIEW
-                </div>
-              </div>
+        {/* Top info panel */}
+        <div className="absolute top-4 left-4 right-4 bg-black/60 backdrop-blur-sm text-white px-4 py-3 rounded-xl z-10 shadow-lg transition-all">
+          <div className="flex justify-between items-start">
+            <div className="max-w-[70%]">
+              <h3 className="font-bold text-lg truncate">{currentLocation.name}</h3>
+              {currentLocation.description && (
+                <p className="text-sm text-gray-300 mt-1 line-clamp-1">
+                  {currentLocation.description}
+                </p>
+              )}
             </div>
-
-            {/* Bottom controls overlay */}
-            <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
-              <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-sm">
-                <div className="flex items-center gap-2">
-                  <Move
-                    className={`w-4 h-4 ${isDragging ? "text-blue-400" : "text-gray-400"}`}
-                  />
-                  <span>Drag to explore</span>
-                </div>
+            <div className="flex gap-2">
+              <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-3 py-1 rounded-full text-xs font-bold flex items-center">
+                <Maximize size={12} className="mr-1" />
+                360°
               </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={resetView}
-                  className="bg-black/60 backdrop-blur-sm hover:bg-black/80 text-white p-2 rounded-lg transition-all shadow-lg"
-                  title="Reset view"
-                >
-                  <RotateCcw className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={zoomOut}
-                  className="bg-black/60 backdrop-blur-sm hover:bg-black/80 text-white p-2 rounded-lg transition-all shadow-lg"
-                  title="Zoom out"
-                  disabled={zoom <= 1}
-                >
-                  <ZoomOut className="w-5 h-5" />
-                </button>
-                <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-sm flex items-center">
-                  {Math.round((zoom - 1) * 100)}%
-                </div>
-                <button
-                  onClick={zoomIn}
-                  className="bg-black/60 backdrop-blur-sm hover:bg-black/80 text-white p-2 rounded-lg transition-all shadow-lg"
-                  title="Zoom in"
-                  disabled={zoom >= 3}
-                >
-                  <ZoomIn className="w-5 h-5" />
-                </button>
-              </div>
+              <button 
+                onClick={toggleFullscreen}
+                className="bg-white/20 hover:bg-white/30 p-1 rounded transition-colors"
+                title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              >
+                <Maximize size={16} />
+              </button>
             </div>
-
-            {/* Help overlay */}
-            {showHelp && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-black/70 backdrop-blur-sm text-white p-6 rounded-2xl text-center max-w-md pointer-events-auto">
-                  <div className="text-4xl mb-3">👋</div>
-                  <h3 className="text-xl font-bold mb-2">
-                    Interactive Panorama Viewer
-                  </h3>
-                  <p className="text-gray-300 mb-4">
-                    Drag to look around, scroll to zoom in/out
-                  </p>
-                  <button
-                    onClick={() => setShowHelp(false)}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all font-medium"
-                  >
-                    Got it!
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Bottom controls overlay */}
+        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
+          <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-sm opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-2">
+              <span>Drag to explore • Scroll to zoom</span>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-sm flex items-center">
+              <span className="font-mono">{zoomLevel}%</span>
+            </div>
+            
+            <div className="flex gap-1">
+              <button
+                onClick={handleResetView}
+                className="bg-black/60 backdrop-blur-sm hover:bg-black/80 text-white p-2 rounded-lg transition-all shadow-lg"
+                title="Reset view"
+              >
+                <RotateCcw className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleZoomOut}
+                className="bg-black/60 backdrop-blur-sm hover:bg-black/80 text-white p-2 rounded-lg transition-all shadow-lg"
+                title="Zoom out"
+              >
+                <ZoomOut className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleZoomIn}
+                className="bg-black/60 backdrop-blur-sm hover:bg-black/80 text-white p-2 rounded-lg transition-all shadow-lg"
+                title="Zoom in"
+              >
+                <ZoomIn className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Help overlay */}
+        {showHelp && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+            <div className="bg-black/80 backdrop-blur-sm text-white p-6 rounded-2xl text-center max-w-md pointer-events-auto border border-white/10">
+              <div className="text-4xl mb-3">👋</div>
+              <h3 className="text-xl font-bold mb-2">
+                Interactive Panorama Viewer
+              </h3>
+              <p className="text-gray-300 mb-4">
+                Drag to look around, scroll to zoom in/out. Click and drag markers for details.
+              </p>
+              <div className="flex gap-3 justify-center mb-4">
+                <div className="bg-white/10 px-3 py-1 rounded-full text-xs">
+                  Drag: Look around
+                </div>
+                <div className="bg-white/10 px-3 py-1 rounded-full text-xs">
+                  Scroll: Zoom
+                </div>
+              </div>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all font-medium shadow-lg"
+              >
+                Got it!
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-blue-50/80 to-blue-100/80 rounded-xl p-4 shadow-sm">
           <div className="text-xs text-blue-700 font-semibold uppercase tracking-wide mb-1">
             Current View
@@ -338,32 +381,18 @@ export default function PanoramaViewer() {
             {currentLocation?.name}
           </div>
         </div>
-        <div className="bg-gradient-to-br from-purple-50/80 to-purple-100/80 rounded-xl p-4 shadow-sm">
-          <div className="text-xs text-purple-700 font-semibold uppercase tracking-wide mb-1">
-            Zoom Level
-          </div>
-          <div className="text-sm font-bold text-gray-800">
-            {Math.round((zoom - 1) * 100)}%
-          </div>
-        </div>
         <div className="bg-gradient-to-br from-cyan-50/80 to-cyan-100/80 rounded-xl p-4 shadow-sm">
           <div className="text-xs text-cyan-700 font-semibold uppercase tracking-wide mb-1">
+            Zoom Level
+          </div>
+          <div className="text-sm font-bold text-gray-800">{zoomLevel}%</div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-50/80 to-purple-100/80 rounded-xl p-4 shadow-sm">
+          <div className="text-xs text-purple-700 font-semibold uppercase tracking-wide mb-1">
             Navigation
           </div>
           <div className="text-sm font-bold text-gray-800">Drag & Scroll</div>
         </div>
-      </div>
-
-      <div className="mt-4 text-center text-sm text-[#1a1a2e]/70 font-medium flex flex-wrap justify-center gap-3">
-        <span className="bg-white/50 px-3 py-1.5 rounded-lg flex items-center gap-1">
-          <Move className="w-4 h-4" /> Drag: Look around
-        </span>
-        <span className="bg-white/50 px-3 py-1.5 rounded-lg flex items-center gap-1">
-          <ZoomIn className="w-4 h-4" /> Scroll: Zoom
-        </span>
-        <span className="bg-white/50 px-3 py-1.5 rounded-lg flex items-center gap-1">
-          <RotateCcw className="w-4 h-4" /> Reset: Center view
-        </span>
       </div>
     </div>
   );

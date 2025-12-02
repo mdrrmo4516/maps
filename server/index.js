@@ -12,6 +12,42 @@ import {
 
 dotenv.config();
 
+// Validate essential environment variables at startup (fail-fast).
+const REQUIRED_ENVS = [
+  'DATABASE_URL',
+  'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_ANON_KEY'
+];
+const missing = REQUIRED_ENVS.filter((k) => !process.env[k]);
+if (missing.length > 0) {
+  console.error('❌ Missing required environment variables:', missing.join(', '));
+  console.error('Please add them to your .env (see .env.example) and restart the server.');
+  // Exit with failure so deploys/containers don't run in a broken state.
+  process.exit(1);
+}
+
+// Warn about optional but useful environment variables.
+const OPTIONAL_ENVS = {
+  'GOOGLE_DRIVE_API_KEY': 'Google Drive image loader (optional)',
+  'VITE_GOOGLE_DRIVE_API_KEY': 'Frontend Google Drive API key (optional)',
+  'NODE_ENV': 'Deployment environment (default: development)'
+};
+const optionalWarnings = [];
+Object.entries(OPTIONAL_ENVS).forEach(([key, desc]) => {
+  if (!process.env[key]) {
+    optionalWarnings.push(`  ⚠ ${key}: ${desc}`);
+  }
+});
+if (optionalWarnings.length > 0) {
+  console.log('ℹ Optional environment variables not set (features disabled):');
+  optionalWarnings.forEach(msg => console.log(msg));
+}
+
+// Log startup config summary.
+console.log('\n✅ Environment validation complete.');
+console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+console.log(`   Port: ${process.env.PORT || 3001}`);
+
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 
@@ -23,7 +59,7 @@ if (!DATABASE_URL) {
 }
 
 function getClient() {
-  if (!DATABASE_URL) throw new Error('NEON_DATABASE_URL not configured');
+  if (!DATABASE_URL) throw new Error('DATABASE_URL not configured');
   return new Client({ connectionString: DATABASE_URL });
 }
 
@@ -1202,6 +1238,233 @@ app.get('/api/rbac/audit-logs', requirePermission('view_audit_logs'), async (req
   } catch (err) {
     if (client) try { await client.end(); } catch {}
     console.error('Get audit logs error', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// =====================
+// MAP LAYERS ENDPOINTS
+// =====================
+
+// Get all map layers
+app.get('/api/map-layers', async (req, res) => {
+  const config_id = req.query.config_id ? parseInt(req.query.config_id) : null;
+  
+  let client;
+  try {
+    client = getClient();
+    await client.connect();
+    
+    let query = 'SELECT * FROM map_layers';
+    let params = [];
+    
+    if (config_id) {
+      query += ' WHERE config_id = $1';
+      params.push(config_id);
+    }
+    
+    query += ' ORDER BY display_order ASC, created_at DESC';
+    
+    const result = await client.query(query, params);
+    await client.end();
+    res.json({ success: true, layers: result.rows });
+  } catch (err) {
+    if (client) try { await client.end(); } catch {}
+    console.error('List map layers error', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Get single map layer
+app.get('/api/map-layers/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+  
+  let client;
+  try {
+    client = getClient();
+    await client.connect();
+    const result = await client.query('SELECT * FROM map_layers WHERE id = $1', [id]);
+    await client.end();
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Layer not found' });
+    }
+    
+    res.json({ success: true, layer: result.rows[0] });
+  } catch (err) {
+    if (client) try { await client.end(); } catch {}
+    console.error('Get map layer error', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Create map layer
+app.post('/api/map-layers', async (req, res) => {
+  const {
+    layer_name,
+    description,
+    file_type,
+    file_data,
+    original_filename,
+    file_size,
+    layer_color,
+    is_visible,
+    is_active,
+    display_order,
+    config_id
+  } = req.body;
+  
+  if (!layer_name || !file_type || !file_data || !original_filename) {
+    return res.status(400).json({ 
+      error: 'Missing required fields: layer_name, file_type, file_data, original_filename' 
+    });
+  }
+  
+  let client;
+  try {
+    client = getClient();
+    await client.connect();
+    const result = await client.query(
+      `INSERT INTO map_layers (
+        layer_name, description, file_type, file_data, original_filename,
+        file_size, layer_color, is_visible, is_active, display_order, config_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [
+        layer_name,
+        description || '',
+        file_type,
+        JSON.stringify(file_data),
+        original_filename,
+        file_size || 0,
+        layer_color || '#3b82f6',
+        is_visible !== undefined ? is_visible : true,
+        is_active !== undefined ? is_active : true,
+        display_order || 0,
+        config_id || null
+      ]
+    );
+    await client.end();
+    res.json({ success: true, layer: result.rows[0] });
+  } catch (err) {
+    if (client) try { await client.end(); } catch {}
+    console.error('Create map layer error', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Update map layer
+app.put('/api/map-layers/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+  
+  const {
+    layer_name,
+    description,
+    file_type,
+    file_data,
+    layer_color,
+    is_visible,
+    is_active,
+    display_order,
+    config_id
+  } = req.body;
+  
+  let client;
+  try {
+    client = getClient();
+    await client.connect();
+    
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+    
+    if (layer_name !== undefined) {
+      updates.push(`layer_name = $${paramCount++}`);
+      values.push(layer_name);
+    }
+    if (description !== undefined) {
+      updates.push(`description = $${paramCount++}`);
+      values.push(description);
+    }
+    if (file_type !== undefined) {
+      updates.push(`file_type = $${paramCount++}`);
+      values.push(file_type);
+    }
+    if (file_data !== undefined) {
+      updates.push(`file_data = $${paramCount++}`);
+      values.push(JSON.stringify(file_data));
+    }
+    if (layer_color !== undefined) {
+      updates.push(`layer_color = $${paramCount++}`);
+      values.push(layer_color);
+    }
+    if (is_visible !== undefined) {
+      updates.push(`is_visible = $${paramCount++}`);
+      values.push(is_visible);
+    }
+    if (is_active !== undefined) {
+      updates.push(`is_active = $${paramCount++}`);
+      values.push(is_active);
+    }
+    if (display_order !== undefined) {
+      updates.push(`display_order = $${paramCount++}`);
+      values.push(display_order);
+    }
+    if (config_id !== undefined) {
+      updates.push(`config_id = $${paramCount++}`);
+      values.push(config_id);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+    
+    const query = `UPDATE map_layers SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    const result = await client.query(query, values);
+    await client.end();
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Layer not found' });
+    }
+    
+    res.json({ success: true, layer: result.rows[0] });
+  } catch (err) {
+    if (client) try { await client.end(); } catch {}
+    console.error('Update map layer error', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Delete map layer
+app.delete('/api/map-layers/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+  
+  let client;
+  try {
+    client = getClient();
+    await client.connect();
+    const result = await client.query('DELETE FROM map_layers WHERE id = $1 RETURNING id', [id]);
+    await client.end();
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Layer not found' });
+    }
+    
+    res.json({ success: true, message: 'Layer deleted' });
+  } catch (err) {
+    if (client) try { await client.end(); } catch {}
+    console.error('Delete map layer error', err);
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });

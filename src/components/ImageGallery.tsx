@@ -209,7 +209,7 @@ export default function ImageGallery({ folderId, title, type = 'drive', sharedLi
           {images.map((image) => (
             <div
               key={image.id}
-              className="group relative aspect-[16/9] rounded-2xl overflow-hidden bg-white/60 shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer transform hover:-translate-y-2"
+              className="group relative aspect-[16/10.3] rounded-2xl overflow-hidden bg-white/60 shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer transform hover:-translate-y-2"
               onClick={() => openImageModal(image)}
             >
               <img

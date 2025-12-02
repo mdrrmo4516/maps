@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { 
-  Upload, 
   X, 
   Layers, 
   Maximize2, 
@@ -13,7 +12,9 @@ import {
   Download,
   RotateCcw,
   Info,
-  FileText
+  FileText,
+  Minus,
+  Plus
 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -485,12 +486,12 @@ export default function InteractiveMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([13.037063508747957, 123.45890718599736]);
+  const [currentZoom, setCurrentZoom] = useState<number>(14);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
 
   const colors = [
     '#3b82f6', '#ef4444', '#10b981', '#f59e0b', 
@@ -514,25 +515,40 @@ export default function InteractiveMap() {
   useEffect(() => {
     if (!mapContainer.current || mapInstance.current) return;
 
-    // Initialize map
+    // Initialize map with enhanced options for free zoom
     const map = L.map(mapContainer.current, {
       center: mapCenter,
       zoom: 14,
       zoomControl: false,
       attributionControl: false,
+      wheelDebounceTime: 40,
+      wheelPxPerZoomLevel: 60,
+      touchZoom: true,
+      doubleClickZoom: true,
+      boxZoom: true,
+      keyboard: true,
+      dragging: true,
+      inertia: true,
+      inertiaDeceleration: 3000,
+      inertiaMaxSpeed: 1500,
+      zoomAnimation: true,
+      zoomAnimationThreshold: 4,
+      fadeAnimation: true,
+      markerZoomAnimation: true,
     });
 
-    // Add tile layer
+    // Add tile layer with higher resolution support
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
+      maxZoom: 22,
+      minZoom: 2,
+      tileSize: 256,
+      zoomOffset: 0,
+      detectRetina: true,
     }).addTo(map);
 
     // Add attribution control
     L.control.attribution({ position: 'bottomright' }).addTo(map);
-
-    // Add zoom controls
-    L.control.zoom({ position: 'topright' }).addTo(map);
 
     // Add location marker
     const mainMarker = L.marker(mapCenter)
@@ -550,21 +566,26 @@ export default function InteractiveMap() {
 
     mapInstance.current = map;
 
-    // Handle map move/zoom
-    const updateMapCenter = () => {
+    // Handle map events
+    const updateMapState = () => {
       if (mapInstance.current) {
         const center = mapInstance.current.getCenter();
         setMapCenter([center.lat, center.lng]);
+        setCurrentZoom(mapInstance.current.getZoom());
       }
     };
     
-    map.on('moveend', updateMapCenter);
-    map.on('zoomend', updateMapCenter);
+    map.on('moveend', updateMapState);
+    map.on('zoomend', updateMapState);
+    map.on('dragstart', () => setIsDragging(true));
+    map.on('dragend', () => setIsDragging(false));
 
     return () => {
       if (mapInstance.current) {
-        mapInstance.current.off('moveend', updateMapCenter);
-        mapInstance.current.off('zoomend', updateMapCenter);
+        mapInstance.current.off('moveend', updateMapState);
+        mapInstance.current.off('zoomend', updateMapState);
+        mapInstance.current.off('dragstart');
+        mapInstance.current.off('dragend');
         mapInstance.current.remove();
         mapInstance.current = null;
       }
@@ -630,121 +651,6 @@ export default function InteractiveMap() {
     }
   };
 
-  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0 || !mapInstance.current) return;
-
-    setUploading(true);
-    setError(null);
-    setSuccess(null);
-
-    const newLayers: Layer[] = [];
-    
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-
-        if (!file.name.toLowerCase().endsWith('.kml')) {
-          setError(`${file.name} is not a KML file`);
-          continue;
-        }
-
-        const reader = new FileReader();
-
-        await new Promise<void>((resolve, reject) => {
-          reader.onload = (e) => {
-            try {
-              const kmlText = e.target?.result as string;
-              const blob = new Blob([kmlText], { type: 'application/vnd.google-earth.kml+xml' });
-              const url = URL.createObjectURL(blob);
-
-              // Simple KML parser for demonstration
-              const layerGroup = L.layerGroup();
-              
-              // Mock parsing - in real app, you'd use a proper KML parser
-              const mockMarkers = [
-                L.marker([13.037063508747957, 123.45890718599736], { 
-                  properties: { name: "Primary Location", description: "Main operational site" } 
-                }),
-                L.marker([13.1391, 123.7437], { 
-                  properties: { name: "Secondary Site", description: "Backup facility" } 
-                })
-              ];
-              
-              const polyline = L.polyline(
-                [[13.037063508747957, 123.45890718599736], [13.1391, 123.7437]],
-                { 
-                  color: '#3b82f6', 
-                  weight: 3,
-                  properties: { name: "Route Alpha", description: "Main transportation route" } 
-                }
-              );
-              
-              const polygon = L.polygon(
-                [[13.03, 123.45], [13.04, 123.45], [13.04, 123.46], [13.03, 123.46]],
-                { 
-                  color: '#ef4444', 
-                  weight: 2, 
-                  fillColor: '#ef4444',
-                  fillOpacity: 0.3,
-                  properties: { name: "Exclusion Zone", description: "Restricted area" } 
-                }
-              );
-
-              mockMarkers.forEach(marker => {
-                if (marker.options.properties) {
-                  marker.bindPopup(`<b>${marker.options.properties.name}</b><br>${marker.options.properties.description}`);
-                }
-                layerGroup.addLayer(marker);
-              });
-              layerGroup.addLayer(polyline);
-              layerGroup.addLayer(polygon);
-
-              const newLayer: Layer = {
-                id: `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
-                name: file.name.replace('.kml', ''),
-                layer: layerGroup,
-                visible: true,
-                color: colors[newLayers.length % colors.length],
-                fileName: file.name,
-                type: 'kml'
-              };
-
-              newLayers.push(newLayer);
-              layerGroup.addTo(mapInstance.current!);
-              
-              resolve();
-            } catch (err) {
-              console.error('Error processing KML:', err);
-              setError(`Error processing ${file.name}`);
-              reject(err);
-            }
-          };
-
-          reader.onerror = () => {
-            setError(`Failed to read ${file.name}`);
-            reject(new Error(`Failed to read ${file.name}`));
-          };
-
-          reader.readAsText(file);
-        });
-      }
-
-      // Update state with all new layers
-      if (newLayers.length > 0) {
-        setLayers(prev => [...prev, ...newLayers]);
-        setSuccess(`Successfully loaded ${newLayers.length} file${newLayers.length > 1 ? 's' : ''}`);
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  }, []);
-
   const toggleLayerVisibility = useCallback((id: string) => {
     setLayers(prev =>
       prev.map(layer => {
@@ -783,8 +689,25 @@ export default function InteractiveMap() {
     }
   }, [layers]);
 
-  const handleZoomIn = () => mapInstance.current?.zoomIn();
-  const handleZoomOut = () => mapInstance.current?.zoomOut();
+  const handleZoomIn = () => {
+    if (mapInstance.current) {
+      mapInstance.current.zoomIn();
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstance.current) {
+      mapInstance.current.zoomOut();
+    }
+  };
+
+  const handleZoomByStep = (delta: number) => {
+    if (mapInstance.current) {
+      const currentZoom = mapInstance.current.getZoom();
+      const newZoom = Math.max(2, Math.min(22, currentZoom + delta));
+      mapInstance.current.setZoom(newZoom);
+    }
+  };
 
   const handleFullscreen = () => {
     if (!mapContainer.current) return;
@@ -811,27 +734,51 @@ export default function InteractiveMap() {
     }
   };
 
-  const exportView = () => {
+  const exportImage = () => {
     if (!mapInstance.current) return;
     
-    const center = mapInstance.current.getCenter();
-    const zoom = mapInstance.current.getZoom();
+    // Create a temporary canvas element
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     
-    const viewData = {
-      center: [center.lat, center.lng],
-      zoom,
-      timestamp: new Date().toISOString()
-    };
+    // Set canvas dimensions
+    canvas.width = 1200;
+    canvas.height = 800;
     
-    const blob = new Blob([JSON.stringify(viewData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'map-view.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Fill background
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add title
+    ctx.fillStyle = '#1a1a2e';
+    ctx.font = 'bold 24px Arial';
+    ctx.fillText('Interactive Map Export', 50, 50);
+    
+    // Add map details
+    ctx.fillStyle = '#475569';
+    ctx.font = '16px Arial';
+    ctx.fillText(`Center: ${mapCenter[0].toFixed(6)}, ${mapCenter[1].toFixed(6)}`, 50, 90);
+    ctx.fillText(`Zoom Level: ${currentZoom}`, 50, 120);
+    ctx.fillText(`Layers: ${layers.length}`, 50, 150);
+    ctx.fillText(`Exported: ${new Date().toLocaleString()}`, 50, 180);
+    
+    // Add decorative elements
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(50, 200);
+    ctx.lineTo(canvas.width - 50, 200);
+    ctx.stroke();
+    
+    // Create download link
+    const dataUrl = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = `map-export-${new Date().getTime()}.png`;
+    link.href = dataUrl;
+    link.click();
+    
+    setSuccess('Map image exported successfully');
   };
 
   return (
@@ -845,11 +792,11 @@ export default function InteractiveMap() {
               <div className="relative group">
                 <Info className="w-4 h-4 text-gray-500 cursor-help" />
                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block w-64 bg-gray-800 text-white text-xs p-2 rounded-lg z-10">
-                  Upload KML files to visualize geographic data. Layers will appear in the sidebar.
+                  Visualize geographic data with advanced controls. Layers will appear in the sidebar.
                 </div>
               </div>
             </div>
-            <p className="text-sm text-[#1a1a2e]/70 mt-1">Upload and visualize KML files with advanced controls</p>
+            <p className="text-sm text-[#1a1a2e]/70 mt-1">Visualize geographic data with advanced controls</p>
           </div>
           
           <div className="flex flex-wrap gap-2 justify-end">
@@ -863,12 +810,12 @@ export default function InteractiveMap() {
             </button>
             
             <button
-              onClick={exportView}
+              onClick={exportImage}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg shadow transition-all text-sm"
-              title="Export current view"
+              title="Export as image"
             >
               <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export View</span>
+              <span className="hidden sm:inline">Export Image</span>
             </button>
             
             <button
@@ -879,34 +826,7 @@ export default function InteractiveMap() {
               <MapPin className="w-4 h-4" />
               <span className="hidden sm:inline">Go to Location</span>
             </button>
-            
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="flex items-center gap-2 px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-            >
-              {uploading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span className="hidden sm:inline">Uploading...</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  <span className="hidden sm:inline">Upload KML</span>
-                </>
-              )}
-            </button>
           </div>
-          
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".kml"
-            multiple
-            onChange={handleFileUpload}
-            className="hidden"
-          />
         </div>
         
         {/* Status Messages */}
@@ -929,22 +849,48 @@ export default function InteractiveMap() {
           className="flex-1 relative"
           style={{ height: '100%' }}
         >
-          {/* Map Controls */}
+          {/* Enhanced Map Controls */}
           <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
-            <button
-              onClick={handleZoomIn}
-              className="w-9 h-9 bg-white hover:bg-gray-100 rounded-lg shadow-md flex items-center justify-center transition-all border border-gray-200"
-              title="Zoom In"
-            >
-              <ZoomIn className="w-4 h-4 text-gray-700" />
-            </button>
-            <button
-              onClick={handleZoomOut}
-              className="w-9 h-9 bg-white hover:bg-gray-100 rounded-lg shadow-md flex items-center justify-center transition-all border border-gray-200"
-              title="Zoom Out"
-            >
-              <ZoomOut className="w-4 h-4 text-gray-700" />
-            </button>
+            {/* Zoom Slider */}
+            <div className="bg-white rounded-lg shadow-md border border-gray-200 p-2 flex flex-col items-center">
+              <button
+                onClick={() => handleZoomByStep(1)}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                title="Zoom In"
+                disabled={currentZoom >= 22}
+              >
+                <Plus className="w-4 h-4 text-gray-700" />
+              </button>
+              
+              <div className="py-1 flex flex-col items-center">
+                <span className="text-xs font-medium text-gray-600">{currentZoom.toFixed(1)}</span>
+                <input
+                  type="range"
+                  min="2"
+                  max="22"
+                  step="0.1"
+                  value={currentZoom}
+                  onChange={(e) => {
+                    if (mapInstance.current) {
+                      mapInstance.current.setZoom(parseFloat(e.target.value));
+                    }
+                  }}
+                  className="w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500"
+                />
+                <span className="text-xs text-gray-500">2-22</span>
+              </div>
+              
+              <button
+                onClick={() => handleZoomByStep(-1)}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                title="Zoom Out"
+                disabled={currentZoom <= 2}
+              >
+                <Minus className="w-4 h-4 text-gray-700" />
+              </button>
+            </div>
+            
+            {/* Action Buttons */}
             <button
               onClick={handleFullscreen}
               className="w-9 h-9 bg-white hover:bg-gray-100 rounded-lg shadow-md flex items-center justify-center transition-all border border-gray-200"
@@ -952,6 +898,7 @@ export default function InteractiveMap() {
             >
               <Maximize2 className="w-4 h-4 text-gray-700" />
             </button>
+            
             <button
               onClick={flyToLocation}
               className="w-9 h-9 bg-white hover:bg-gray-100 rounded-lg shadow-md flex items-center justify-center transition-all border border-gray-200"
@@ -966,8 +913,15 @@ export default function InteractiveMap() {
             <div className="absolute bottom-4 left-4 z-[1000] bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg text-sm font-medium text-gray-700 border border-white/50">
               <div>Lat: {mapCenter[0].toFixed(6)}</div>
               <div>Lng: {mapCenter[1].toFixed(6)}</div>
+              <div className="text-xs mt-1">Zoom: {currentZoom.toFixed(1)}</div>
             </div>
           )}
+          
+          {/* Free Zoom Indicator */}
+          <div className="absolute bottom-4 right-4 z-[1000] bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg text-xs font-medium text-gray-700 border border-white/50">
+            <div>Free Zoom Enabled</div>
+            <div className="text-blue-600">Use mouse wheel to zoom</div>
+          </div>
         </div>
 
         {/* Layers Panel */}
@@ -1047,12 +1001,12 @@ export default function InteractiveMap() {
       </div>
 
       {/* Empty State */}
-      {layers.length === 0 && !uploading && (
+      {layers.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg max-w-md">
-            <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-lg font-semibold text-gray-700 mb-2">No KML files loaded</p>
-            <p className="text-sm text-gray-500 mb-4">Upload KML files to visualize geographic data on the map</p>
+            <Layers className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <p className="text-lg font-semibold text-gray-700 mb-2">No layers loaded</p>
+            <p className="text-sm text-gray-500 mb-4">Evacuation centers data is displayed on the map</p>
             <div className="bg-blue-50 p-3 rounded-lg text-left mt-2">
               <p className="text-sm font-medium text-blue-800 mb-1">Primary Location:</p>
               <p className="text-xs text-blue-700">Latitude: {mapCenter[0].toFixed(6)}</p>

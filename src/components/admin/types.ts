@@ -91,6 +91,23 @@ export interface SidebarButton {
   updated_at: string;
 }
 
+export interface MapLayer {
+  id: number;
+  layer_name: string;
+  description: string;
+  file_type: 'kml' | 'csv' | 'json' | 'geojson';
+  file_data: any;
+  original_filename: string;
+  file_size: number;
+  layer_color: string;
+  is_visible: boolean;
+  is_active: boolean;
+  display_order: number;
+  config_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type Tab =
   | "pages"
   | "database"
@@ -148,4 +165,18 @@ export interface SidebarButtonFormData {
   source_type: 'drive' | 'photos';
   is_enabled: boolean;
   order_index: number;
+}
+
+export interface MapLayerFormData {
+  layer_name: string;
+  description: string;
+  file_type: 'kml' | 'csv' | 'json' | 'geojson';
+  file_data: any;
+  original_filename: string;
+  file_size: number;
+  layer_color: string;
+  is_visible: boolean;
+  is_active: boolean;
+  display_order: number;
+  config_id: number | null;
 }

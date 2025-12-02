@@ -26,6 +26,7 @@ function AppContent() {
   const [allFolders, setAllFolders] = useState(initialDriveFolders);
   const [sidebarRefresh, setSidebarRefresh] = useState(0);
   const [customButtons, setCustomButtons] = useState<CustomButton[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   useEffect(() => {
     const fetchCustomButtons = async () => {
@@ -60,6 +61,10 @@ function AppContent() {
 
   const handleToggleBoundary = () => {
     setIsBoundaryOpen(!isBoundaryOpen);
+  };
+
+  const handleToggleSidebar = () => {
+    setIsSidebarOpen(!isSidebarOpen);
   };
 
   const renderContent = () => {
@@ -147,13 +152,25 @@ function AppContent() {
         isBoundaryOpen={isBoundaryOpen}
         onToggleBoundary={handleToggleBoundary}
         refreshTrigger={sidebarRefresh}
-        customButtons={customButtons}
+        isOpen={isSidebarOpen}
+        onToggleSidebar={handleToggleSidebar}
       />
 
-      <div className="ml-64 min-h-screen flex flex-col">
-        <TopBar activeView={activeView} onNavigate={handleNavigate} />
+      {/* Main content area - responsive margin for sidebar */}
+      <div 
+        className={`min-h-screen flex flex-col transition-all duration-300 ${
+          isSidebarOpen ? 'lg:ml-64' : 'ml-0'
+        }`}
+      >
+        <TopBar 
+          activeView={activeView} 
+          onNavigate={handleNavigate}
+          onToggleSidebar={handleToggleSidebar}
+          isSidebarOpen={isSidebarOpen}
+        />
 
-        <main className="flex-1 p-8">
+        {/* Responsive padding - smaller on mobile, larger on desktop */}
+        <main className="flex-1 p-4 sm:p-6 md:p-8">
           <div className="h-full min-h-[calc(100vh-8rem)]">
             {activeView === 'admin' && user ? (
               <AdminPanel onNavigate={handleNavigate} onSidebarUpdate={refreshSidebar} />

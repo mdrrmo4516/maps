@@ -1,0 +1,1042 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Users, Settings, Plus, Edit, Trash2, Save, X, 
+  UserPlus, UserCheck, UserX, Eye, EyeOff, 
+  MapPin, Layers, Upload, Download, RefreshCw,
+  ChevronDown, ChevronUp, Search, Filter, 
+  Bell, Lock, LogOut, Shield, Key, Globe, 
+  Home, Compass, Folder, FileText, Calendar,
+  Check, AlertTriangle, Info, HelpCircle
+} from 'lucide-react';
+
+const App = () => {
+  // State management
+  const [activeTab, setActiveTab] = useState('interactive');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showAddUserForm, setShowAddUserForm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState('all');
+  const [currentUser, setCurrentUser] = useState({
+    id: 1,
+    name: 'Admin User',
+    email: 'admin@pioduran.gov',
+    role: 'admin',
+    avatar: 'https://placehold.co/40x40/3b82f6/ffffff?text=AU'
+  });
+  
+  // Mock data
+  const [users, setUsers] = useState([
+    {
+      id: 1,
+      name: 'Admin User',
+      email: 'admin@pioduran.gov',
+      role: 'admin',
+      status: 'active',
+      lastLogin: '2025-11-30 14:30',
+      avatar: 'https://placehold.co/40x40/3b82f6/ffffff?text=AU'
+    },
+    {
+      id: 2,
+      name: 'Map Editor',
+      email: 'editor@pioduran.gov',
+      role: 'editor',
+      status: 'active',
+      lastLogin: '2025-11-29 09:15',
+      avatar: 'https://placehold.co/40x40/10b981/ffffff?text=ME'
+    },
+    {
+      id: 3,
+      name: 'Viewer User',
+      email: 'viewer@pioduran.gov',
+      role: 'viewer',
+      status: 'inactive',
+      lastLogin: '2025-11-25 16:45',
+      avatar: 'https://placehold.co/40x40/f59e0b/ffffff?text=VU'
+    },
+    {
+      id: 4,
+      name: 'Emergency Coordinator',
+      email: 'emergency@pioduran.gov',
+      role: 'coordinator',
+      status: 'active',
+      lastLogin: '2025-11-30 11:20',
+      avatar: 'https://placehold.co/40x40/ef4444/ffffff?text=EC'
+    }
+  ]);
+
+  const [mapLayers, setMapLayers] = useState([
+    {
+      id: 1,
+      name: 'Evacuation Centers',
+      file: 'evacuation_centers.csv',
+      visible: true,
+      opacity: 1.0,
+      color: '#3b82f6',
+      type: 'point'
+    },
+    {
+      id: 2,
+      name: 'Hazard Zones',
+      file: 'hazard_zones.kml',
+      visible: true,
+      opacity: 0.7,
+      color: '#ef4444',
+      type: 'polygon'
+    },
+    {
+      id: 3,
+      name: 'Boundary Map',
+      file: 'boundary_map.geojson',
+      visible: true,
+      opacity: 0.8,
+      color: '#10b981',
+      type: 'line'
+    }
+  ]);
+
+  const [systemSettings, setSystemSettings] = useState({
+    map: {
+      defaultZoom: 12,
+      defaultCenter: { lat: 13.03706, lng: 123.45890 },
+      baseLayer: 'streets',
+      showScale: true,
+      showCoordinates: true
+    },
+    notifications: {
+      emailAlerts: true,
+      pushNotifications: true,
+      alertThreshold: 'medium'
+    },
+    security: {
+      passwordExpiry: 90,
+      twoFactorAuth: true,
+      sessionTimeout: 30
+    },
+    interface: {
+      theme: 'light',
+      language: 'en',
+      fontSize: 'medium'
+    }
+  });
+
+  // CRUD Operations for Users
+  const addUser = (newUser) => {
+    const userWithId = {
+      ...newUser,
+      id: Date.now(),
+      status: 'active',
+      lastLogin: new Date().toLocaleString()
+    };
+    setUsers([...users, userWithId]);
+    setShowAddUserForm(false);
+  };
+
+  const updateUser = (updatedUser) => {
+    setUsers(users.map(user => 
+      user.id === updatedUser.id ? updatedUser : user
+    ));
+    setSelectedUser(null);
+  };
+
+  const deleteUser = (userId) => {
+    setUsers(users.filter(user => user.id !== userId));
+    if (selectedUser && selectedUser.id === userId) {
+      setSelectedUser(null);
+    }
+  };
+
+  const toggleUserStatus = (userId) => {
+    setUsers(users.map(user => 
+      user.id === userId ? { ...user, status: user.status === 'active' ? 'inactive' : 'active' } : user
+    ));
+  };
+
+  // CRUD Operations for Map Layers
+  const addLayer = (newLayer) => {
+    const layerWithId = {
+      ...newLayer,
+      id: Date.now(),
+      visible: true,
+      opacity: 1.0,
+      color: '#3b82f6'
+    };
+    setMapLayers([...mapLayers, layerWithId]);
+  };
+
+  const updateLayer = (updatedLayer) => {
+    setMapLayers(mapLayers.map(layer => 
+      layer.id === updatedLayer.id ? updatedLayer : layer
+    ));
+  };
+
+  const deleteLayer = (layerId) => {
+    setMapLayers(mapLayers.filter(layer => layer.id !== layerId));
+  };
+
+  const toggleLayerVisibility = (layerId) => {
+    setMapLayers(mapLayers.map(layer => 
+      layer.id === layerId ? { ...layer, visible: !layer.visible } : layer
+    ));
+  };
+
+  // Filter users based on search and role
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = filterRole === 'all' || user.role === filterRole;
+    return matchesSearch && matchesRole;
+  });
+
+  // User form component
+  const UserForm = ({ user, onSubmit, onCancel }) => {
+    const [formData, setFormData] = useState(user || {
+      name: '',
+      email: '',
+      role: 'viewer',
+      status: 'active'
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      onSubmit(formData);
+    };
+
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h3 className="text-xl font-bold mb-4">{user ? 'Edit User' : 'Add New User'}</h3>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+            <select
+              name="role"
+              value={formData.role}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="admin">Administrator</option>
+              <option value="editor">Editor</option>
+              <option value="viewer">Viewer</option>
+              <option value="coordinator">Coordinator</option>
+            </select>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div className="flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+            >
+              {user ? 'Update User' : 'Add User'}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
+  // Layer settings component
+  const LayerSettings = ({ layer, onUpdate, onDelete, onToggleVisibility }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedLayer, setEditedLayer] = useState(layer);
+
+    const handleSave = () => {
+      onUpdate(editedLayer);
+      setIsEditing(false);
+    };
+
+    const handleCancel = () => {
+      setEditedLayer(layer);
+      setIsEditing(false);
+    };
+
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setEditedLayer(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleOpacityChange = (e) => {
+      setEditedLayer(prev => ({ ...prev, opacity: parseFloat(e.target.value) }));
+    };
+
+    const handleColorChange = (e) => {
+      setEditedLayer(prev => ({ ...prev, color: e.target.value }));
+    };
+
+    return (
+      <div className="bg-white p-4 rounded-lg shadow mb-4">
+        <div className="flex justify-between items-center mb-3">
+          <div className="flex items-center">
+            <div 
+              className="w-4 h-4 rounded-full mr-2" 
+              style={{ backgroundColor: layer.color }}
+            ></div>
+            <span className="font-medium">{layer.name}</span>
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => onToggleVisibility(layer.id)}
+              className={`p-1 rounded ${layer.visible ? 'text-green-600' : 'text-gray-400'}`}
+              title={layer.visible ? 'Hide Layer' : 'Show Layer'}
+            >
+              {layer.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+            <button
+              onClick={() => setIsEditing(!isEditing)}
+              className="p-1 text-blue-600 hover:text-blue-800"
+              title="Edit Layer"
+            >
+              <Edit size={16} />
+            </button>
+            <button
+              onClick={() => onDelete(layer.id)}
+              className="p-1 text-red-600 hover:text-red-800"
+              title="Delete Layer"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+
+        {isEditing ? (
+          <div className="space-y-3 pt-3 border-t border-gray-200">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Layer Name</label>
+              <input
+                type="text"
+                name="name"
+                value={editedLayer.name}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">File Name</label>
+              <input
+                type="text"
+                name="file"
+                value={editedLayer.file}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Opacity</label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={editedLayer.opacity}
+                onChange={handleOpacityChange}
+                className="w-full"
+              />
+              <div className="text-xs text-gray-500 mt-1">{Math.round(editedLayer.opacity * 100)}%</div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+              <input
+                type="color"
+                value={editedLayer.color}
+                onChange={handleColorChange}
+                className="w-full h-8"
+              />
+            </div>
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={handleCancel}
+                className="px-3 py-1 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-600 mt-2">
+            <div className="flex justify-between">
+              <span>File: {layer.file}</span>
+              <span>Type: {layer.type}</span>
+            </div>
+            <div className="flex justify-between mt-1">
+              <span>Opacity: {Math.round(layer.opacity * 100)}%</span>
+              <span>Status: {layer.visible ? 'Visible' : 'Hidden'}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // System settings component
+  const SystemSettings = ({ settings, onUpdate }) => {
+    const [localSettings, setLocalSettings] = useState(settings);
+    
+    const handleSave = () => {
+      onUpdate(localSettings);
+    };
+
+    const handleChange = (category, field, value) => {
+      setLocalSettings(prev => ({
+        ...prev,
+        [category]: {
+          ...prev[category],
+          [field]: value
+        }
+      }));
+    };
+
+    const renderSettingGroup = (title, fields, category) => {
+      return (
+        <div className="bg-white p-4 rounded-lg shadow mb-4">
+          <h3 className="text-lg font-semibold mb-3">{title}</h3>
+          <div className="space-y-3">
+            {fields.map(field => (
+              <div key={field.name} className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">{field.label}</label>
+                {field.type === 'select' ? (
+                  <select
+                    value={localSettings[category][field.name]}
+                    onChange={(e) => handleChange(category, field.name, e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {field.options.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                ) : field.type === 'checkbox' ? (
+                  <input
+                    type="checkbox"
+                    checked={localSettings[category][field.name]}
+                    onChange={(e) => handleChange(category, field.name, e.target.checked)}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : field.type === 'number' ? (
+                  <input
+                    type="number"
+                    value={localSettings[category][field.name]}
+                    onChange={(e) => handleChange(category, field.name, parseInt(e.target.value))}
+                    className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={localSettings[category][field.name]}
+                    onChange={(e) => handleChange(category, field.name, e.target.value)}
+                    className="w-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h2 className="text-xl font-bold mb-4">System Settings</h2>
+        
+        {renderSettingGroup('Map Settings', [
+          { name: 'defaultZoom', label: 'Default Zoom Level', type: 'number' },
+          { name: 'baseLayer', label: 'Base Layer', type: 'select', options: [
+            { value: 'streets', label: 'Streets' },
+            { value: 'satellite', label: 'Satellite' },
+            { value: 'terrain', label: 'Terrain' }
+          ] },
+          { name: 'showScale', label: 'Show Scale Bar', type: 'checkbox' },
+          { name: 'showCoordinates', label: 'Show Coordinates', type: 'checkbox' }
+        ], 'map')}
+
+        {renderSettingGroup('Notification Settings', [
+          { name: 'emailAlerts', label: 'Email Alerts', type: 'checkbox' },
+          { name: 'pushNotifications', label: 'Push Notifications', type: 'checkbox' },
+          { name: 'alertThreshold', label: 'Alert Threshold', type: 'select', options: [
+            { value: 'low', label: 'Low' },
+            { value: 'medium', label: 'Medium' },
+            { value: 'high', label: 'High' }
+          ] }
+        ], 'notifications')}
+
+        {renderSettingGroup('Security Settings', [
+          { name: 'passwordExpiry', label: 'Password Expiry (days)', type: 'number' },
+          { name: 'twoFactorAuth', label: 'Two-Factor Authentication', type: 'checkbox' },
+          { name: 'sessionTimeout', label: 'Session Timeout (minutes)', type: 'number' }
+        ], 'security')}
+
+        {renderSettingGroup('Interface Settings', [
+          { name: 'theme', label: 'Theme', type: 'select', options: [
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+            { value: 'system', label: 'System Default' }
+          ] },
+          { name: 'language', label: 'Language', type: 'select', options: [
+            { value: 'en', label: 'English' },
+            { value: 'es', label: 'Spanish' },
+            { value: 'fr', label: 'French' }
+          ] },
+          { name: 'fontSize', label: 'Font Size', type: 'select', options: [
+            { value: 'small', label: 'Small' },
+            { value: 'medium', label: 'Medium' },
+            { value: 'large', label: 'Large' }
+          ] }
+        ], 'interface')}
+
+        <div className="flex justify-end pt-4">
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+          >
+            Save All Settings
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Main dashboard UI
+  return (
+    <div className="h-screen flex bg-gray-50">
+      {/* Sidebar */}
+      <div className={`bg-blue-900 text-white w-64 transition-all duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-4 border-b border-blue-800">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+              <img src="https://placehold.co/40x40/3b82f6/ffffff?text=MD" alt="Logo" className="rounded-full" />
+            </div>
+            <div>
+              <div className="font-bold">MDRRMO</div>
+              <div className="text-sm opacity-80">PIO DURAN</div>
+            </div>
+          </div>
+        </div>
+        
+        <nav className="p-4 space-y-2">
+          <button 
+            onClick={() => setActiveTab('panorama')} 
+            className={`w-full p-3 rounded-lg flex items-center space-x-3 ${activeTab === 'panorama' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
+          >
+            <Compass size={18} />
+            <span>Panorama</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('basemap')} 
+            className={`w-full p-3 rounded-lg flex items-center space-x-3 ${activeTab === 'basemap' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
+          >
+            <MapPin size={18} />
+            <span>Base Map</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('elevation')} 
+            className={`w-full p-3 rounded-lg flex items-center space-x-3 ${activeTab === 'elevation' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
+          >
+            <Folder size={18} />
+            <span>Elevation Map</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('evacuation')} 
+            className={`w-full p-3 rounded-lg flex items-center space-x-3 ${activeTab === 'evacuation' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
+          >
+            <Home size={18} />
+            <span>Evacuation</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('hazards')} 
+            className={`w-full p-3 rounded-lg flex items-center space-x-3 ${activeTab === 'hazards' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
+          >
+            <AlertTriangle size={18} />
+            <span>Hazards</span>
+          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setActiveTab('boundary')} 
+              className={`w-full p-3 rounded-lg flex items-center space-x-3 ${activeTab === 'boundary' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
+            >
+              <FileText size={18} />
+              <span>Boundary Map</span>
+              <ChevronDown size={16} className="ml-auto" />
+            </button>
+          </div>
+          <button 
+            onClick={() => setActiveTab('interactive')} 
+            className={`w-full p-3 rounded-lg flex items-center space-x-3 ${activeTab === 'interactive' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
+          >
+            <Compass size={18} />
+            <span>Interactive</span>
+          </button>
+        </nav>
+
+        <div className="absolute bottom-0 w-full p-4 border-t border-blue-800">
+          <button 
+            onClick={() => setUserManagementOpen(true)}
+            className="w-full p-3 rounded-lg flex items-center space-x-3 hover:bg-blue-800"
+          >
+            <Users size={18} />
+            <span>User Management</span>
+          </button>
+          <button 
+            onClick={() => setSettingsOpen(true)}
+            className="w-full p-3 rounded-lg flex items-center space-x-3 hover:bg-blue-800 mt-2"
+          >
+            <Settings size={18} />
+            <span>Settings</span>
+          </button>
+          <button 
+            onClick={() => {}}
+            className="w-full p-3 rounded-lg flex items-center space-x-3 hover:bg-blue-800 mt-2"
+          >
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Header */}
+        <header className="bg-gradient-to-r from-blue-900 to-purple-900 text-white p-4 flex justify-between items-center">
+          <div className="flex items-center space-x-4">
+            <button 
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 hover:bg-blue-800 rounded"
+            >
+              <Menu size={20} />
+            </button>
+            <h1 className="text-xl font-bold">MDRRMO PIO DURAN MAP DIRECTORY</h1>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+                <img src={currentUser.avatar} alt="User" className="rounded-full w-6 h-6" />
+              </div>
+              <span>{currentUser.name}</span>
+            </div>
+            <button className="p-2 hover:bg-blue-800 rounded">
+              <Bell size={20} />
+            </button>
+            <button className="p-2 hover:bg-blue-800 rounded">
+              <HelpCircle size={20} />
+            </button>
+          </div>
+        </header>
+
+        {/* Dashboard Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === 'interactive' && (
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">Interactive Map</h2>
+                  <p className="text-gray-600">Upload and visualize KML files with advanced controls</p>
+                </div>
+                <div className="flex space-x-2">
+                  <button className="px-4 py-2 bg-orange-500 text-white rounded-md flex items-center space-x-2 hover:bg-orange-600">
+                    <RefreshCw size={16} />
+                    <span>Reset</span>
+                  </button>
+                  <button className="px-4 py-2 bg-green-500 text-white rounded-md flex items-center space-x-2 hover:bg-green-600">
+                    <Download size={16} />
+                    <span>Export View</span>
+                  </button>
+                  <button className="px-4 py-2 bg-blue-500 text-white rounded-md flex items-center space-x-2 hover:bg-blue-600">
+                    <MapPin size={16} />
+                    <span>Go to Location</span>
+                  </button>
+                  <button className="px-4 py-2 bg-indigo-500 text-white rounded-md flex items-center space-x-2 hover:bg-indigo-600">
+                    <Upload size={16} />
+                    <span>Upload KML</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                <div className="lg:col-span-3 h-[600px] bg-gray-100 rounded-lg relative">
+                  <div className="absolute top-2 right-2 z-10 flex flex-col space-y-2">
+                    <button className="p-2 bg-white rounded shadow hover:bg-gray-50">
+                      <Plus size={16} />
+                    </button>
+                    <button className="p-2 bg-white rounded shadow hover:bg-gray-50">
+                      <Minus size={16} />
+                    </button>
+                    <button className="p-2 bg-white rounded shadow hover:bg-gray-50">
+                      <Search size={16} />
+                    </button>
+                    <button className="p-2 bg-white rounded shadow hover:bg-gray-50">
+                      <RefreshCw size={16} />
+                    </button>
+                    <button className="p-2 bg-white rounded shadow hover:bg-gray-50">
+                      <MapPin size={16} />
+                    </button>
+                  </div>
+                  
+                  {/* Mock map content */}
+                  <div className="h-full bg-cover bg-center" style={{ backgroundImage: 'url(https://placehold.co/800x600/e5e7eb/1f2937?text=Map+Content)' }}>
+                    <div className="absolute top-4 left-4 bg-white p-3 rounded shadow">
+                      <div className="text-sm font-medium">Primary Location</div>
+                      <div className="text-xs text-gray-600">Lat: 13.03706...</div>
+                      <div className="text-xs text-gray-600">Lng: 123.45890...</div>
+                      <button className="mt-1 text-xs text-blue-600 hover:text-blue-800">Close</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex items-center space-x-2">
+                      <Layers size={18} />
+                      <h3 className="font-semibold">Layers (1)</h3>
+                    </div>
+                    <button className="text-red-600 text-sm hover:text-red-800">
+                      Clear All
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {mapLayers.map(layer => (
+                      <div key={layer.id} className="bg-white p-3 rounded shadow">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: layer.color }}
+                            ></div>
+                            <span className="text-sm font-medium">{layer.name}</span>
+                          </div>
+                          <div className="flex space-x-1">
+                            <button 
+                              onClick={() => toggleLayerVisibility(layer.id)}
+                              className={`p-1 rounded ${layer.visible ? 'text-green-600' : 'text-gray-400'}`}
+                            >
+                              {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                            </button>
+                            <button className="p-1 text-blue-600 hover:text-blue-800">
+                              <Edit size={14} />
+                            </button>
+                            <button className="p-1 text-red-600 hover:text-red-800">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {layer.file}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4">
+                    <button 
+                      onClick={() => addLayer({ name: 'New Layer', file: 'new_layer.kml', type: 'point' })}
+                      className="w-full p-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                    >
+                      + Add Layer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'panorama' && (
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h2 className="text-2xl font-bold mb-4">Panorama View</h2>
+              <div className="h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+                <p className="text-gray-500">Panorama view content will be displayed here</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'basemap' && (
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h2 className="text-2xl font-bold mb-4">Base Map</h2>
+              <div className="h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+                <p className="text-gray-500">Base map content will be displayed here</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'elevation' && (
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h2 className="text-2xl font-bold mb-4">Elevation Map</h2>
+              <div className="h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+                <p className="text-gray-500">Elevation map content will be displayed here</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'evacuation' && (
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h2 className="text-2xl font-bold mb-4">Evacuation Centers</h2>
+              <div className="h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+                <p className="text-gray-500">Evacuation centers content will be displayed here</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'hazards' && (
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h2 className="text-2xl font-bold mb-4">Hazard Zones</h2>
+              <div className="h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+                <p className="text-gray-500">Hazard zones content will be displayed here</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'boundary' && (
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h2 className="text-2xl font-bold mb-4">Boundary Map</h2>
+              <div className="h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+                <p className="text-gray-500">Boundary map content will be displayed here</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* User Management Modal */}
+      {userManagementOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold">User Management</h2>
+                <button 
+                  onClick={() => setUserManagementOpen(false)}
+                  className="p-2 hover:bg-gray-200 rounded-full"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center space-x-4">
+                  <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search users..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <select
+                    value={filterRole}
+                    onChange={(e) => setFilterRole(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Roles</option>
+                    <option value="admin">Administrators</option>
+                    <option value="editor">Editors</option>
+                    <option value="viewer">Viewers</option>
+                    <option value="coordinator">Coordinators</option>
+                  </select>
+                </div>
+                <button
+                  onClick={() => setShowAddUserForm(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md flex items-center space-x-2 hover:bg-blue-700"
+                >
+                  <Plus size={16} />
+                  <span>Add User</span>
+                </button>
+              </div>
+
+              {showAddUserForm ? (
+                <UserForm 
+                  onSubmit={addUser} 
+                  onCancel={() => setShowAddUserForm(false)} 
+                />
+              ) : selectedUser ? (
+                <UserForm 
+                  user={selectedUser} 
+                  onSubmit={updateUser} 
+                  onCancel={() => setSelectedUser(null)} 
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredUsers.map(user => (
+                        <tr key={user.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full mr-3" />
+                              <span className="font-medium">{user.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">{user.email}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              user.role === 'admin' ? 'bg-red-100 text-red-800' :
+                              user.role === 'editor' ? 'bg-green-100 text-green-800' :
+                              user.role === 'viewer' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-blue-100 text-blue-800'
+                            }`}>
+                              {user.role}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {user.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">{user.lastLogin}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => setSelectedUser(user)}
+                              className="text-blue-600 hover:text-blue-900 mr-3"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => toggleUserStatus(user.id)}
+                              className={`mr-3 ${
+                                user.status === 'active' ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'
+                              }`}
+                            >
+                              {user.status === 'active' ? <UserX size={16} /> : <UserCheck size={16} />}
+                            </button>
+                            <button
+                              onClick={() => deleteUser(user.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {settingsOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold">System Settings</h2>
+                <button 
+                  onClick={() => setSettingsOpen(false)}
+                  className="p-2 hover:bg-gray-200 rounded-full"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-lg shadow">
+                  <h3 className="text-lg font-semibold mb-3">Map Layers</h3>
+                  <div className="space-y-3">
+                    {mapLayers.map(layer => (
+                      <LayerSettings
+                        key={layer.id}
+                        layer={layer}
+                        onUpdate={updateLayer}
+                        onDelete={deleteLayer}
+                        onToggleVisibility={toggleLayerVisibility}
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-4">
+                    <button
+                      onClick={() => addLayer({ name: 'New Layer', file: 'new_layer.kml', type: 'point' })}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                    >
+                      + Add New Layer
+                    </button>
+                  </div>
+                </div>
+
+                <SystemSettings 
+                  settings={systemSettings} 
+                  onUpdate={setSystemSettings} 
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Helper component for menu icon
+const Menu = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="12" x2="21" y2="12"></line>
+    <line x1="3" y1="6" x2="21" y2="6"></line>
+    <line x1="3" y1="18" x2="21" y2="18"></line>
+  </svg>
+);
+
+export default App;
