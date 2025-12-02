@@ -37,6 +37,47 @@ interface Layer {
   type: 'kml' | 'csv';
 }
 
+interface MapConfig {
+  id: number;
+  config_name: string;
+  description: string;
+  default_center_lat: number;
+  default_center_lng: number;
+  default_zoom: number;
+  min_zoom: number;
+  max_zoom: number;
+  reference_circle_radius: number;
+  reference_circle_color: string;
+  max_file_size_mb: number;
+  tile_layer_url: string;
+  enable_location_marker: boolean;
+  enable_reference_circle: boolean;
+  is_active: boolean;
+  allowed_file_types: string[];
+}
+
+interface MapLayer {
+  id: number;
+  layer_name: string;
+  description: string;
+  file_type: string;
+  file_data: any;
+  original_filename: string;
+  file_size: number;
+  layer_color: string;
+  is_visible: boolean;
+  is_active: boolean;
+  display_order: number;
+  config_id: number;
+}
+
+interface InteractiveMapProps {
+  mapConfigs?: MapConfig[];
+  activeConfigId?: number | null;
+  mapLayers?: MapLayer[];
+  onLayerUpdate?: (layer: MapLayer) => void;
+}
+
 // CSV Data
 const csvData = `WKT,name,description
 "POINT (123.446605 13.03076)",SLTCFPDI,"SCHOOL (Private) 
@@ -482,15 +523,37 @@ const extractCoordinates = (wkt: string) => {
   return null;
 };
 
-export default function InteractiveMap() {
+export default function InteractiveMap({
+  mapConfigs = [],
+  activeConfigId = null,
+  mapLayers = [],
+  onLayerUpdate,
+}: InteractiveMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [mapCenter, setMapCenter] = useState<[number, number]>([13.037063508747957, 123.45890718599736]);
-  const [currentZoom, setCurrentZoom] = useState<number>(14);
+  
+  // Get active config or use defaults
+  const activeConfig = activeConfigId 
+    ? mapConfigs.find(c => c.id === activeConfigId)
+    : mapConfigs.find(c => c.is_active);
+  
+  const defaultCenter: [number, number] = activeConfig 
+    ? [activeConfig.default_center_lat, activeConfig.default_center_lng]
+    : [13.037063508747957, 123.45890718599736];
+  
+  const defaultZoom = activeConfig?.default_zoom ?? 14;
+  const minZoom = activeConfig?.min_zoom ?? 2;
+  const maxZoom = activeConfig?.max_zoom ?? 20;
+  const referenceRadius = activeConfig?.reference_circle_radius ?? 1000;
+  const referenceColor = activeConfig?.reference_circle_color ?? '#3b82f6';
+  const tileLayerUrl = activeConfig?.tile_layer_url ?? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  
+  const [mapCenter, setMapCenter] = useState<[number, number]>(defaultCenter);
+  const [currentZoom, setCurrentZoom] = useState<number>(defaultZoom);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
   const colors = [
@@ -518,9 +581,11 @@ export default function InteractiveMap() {
     // Initialize map with enhanced options for free zoom
     const map = L.map(mapContainer.current, {
       center: mapCenter,
-      zoom: 14,
+      zoom: defaultZoom,
       zoomControl: false,
       attributionControl: false,
+      minZoom: minZoom,
+      maxZoom: maxZoom,
       wheelDebounceTime: 40,
       wheelPxPerZoomLevel: 60,
       touchZoom: true,
@@ -537,8 +602,8 @@ export default function InteractiveMap() {
       markerZoomAnimation: true,
     });
 
-    // Add tile layer with higher resolution support
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Add tile layer with config or default
+    L.tileLayer(tileLayerUrl, {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 22,
       minZoom: 2,
@@ -550,19 +615,23 @@ export default function InteractiveMap() {
     // Add attribution control
     L.control.attribution({ position: 'bottomright' }).addTo(map);
 
-    // Add location marker
-    const mainMarker = L.marker(mapCenter)
-      .addTo(map)
-      .bindPopup('Primary Location<br>Lat: 13.03706...<br>Lng: 123.45890...')
-      .openPopup();
+    // Add location marker if enabled in config
+    if (activeConfig?.enable_location_marker !== false) {
+      const mainMarker = L.marker(mapCenter)
+        .addTo(map)
+        .bindPopup(`Primary Location<br>Lat: ${mapCenter[0].toFixed(5)}<br>Lng: ${mapCenter[1].toFixed(5)}`)
+        .openPopup();
+    }
 
-    // Add reference circle
-    L.circle(mapCenter, {
-      color: '#3b82f6',
-      fillColor: '#3b82f6',
-      fillOpacity: 0.1,
-      radius: 1000
-    }).addTo(map);
+    // Add reference circle if enabled in config
+    if (activeConfig?.enable_reference_circle !== false) {
+      L.circle(mapCenter, {
+        color: referenceColor,
+        fillColor: referenceColor,
+        fillOpacity: 0.1,
+        radius: referenceRadius
+      }).addTo(map);
+    }
 
     mapInstance.current = map;
 
@@ -590,12 +659,98 @@ export default function InteractiveMap() {
         mapInstance.current = null;
       }
     };
-  }, [mapCenter]);
+  }, [mapCenter, activeConfig]);
 
   // Load CSV data on mount
   useEffect(() => {
     loadCSVData();
   }, []);
+
+  // Load mapLayers from props when activeConfigId changes
+  useEffect(() => {
+    if (!mapInstance.current || !activeConfigId) return;
+    
+    const activeLayers = mapLayers.filter(
+      layer => layer.config_id === activeConfigId && layer.is_active
+    );
+    
+    activeLayers.forEach(async (mapLayer) => {
+      try {
+        if (!mapLayer.file_data) return;
+        
+        const layerGroup = L.layerGroup();
+        
+        // Parse based on file type
+        if (mapLayer.file_type === 'kml') {
+          // KML parsing would be handled here
+          // For now, we'll show a placeholder
+          console.log(`Loading KML layer: ${mapLayer.layer_name}`);
+        } else if (mapLayer.file_type === 'csv') {
+          const parsedData = parseCSV(mapLayer.file_data);
+          parsedData.forEach((item: any) => {
+            const coords = extractCoordinates(item.WKT);
+            if (coords) {
+              const [lng, lat] = coords;
+              const marker = L.marker([lat, lng], {
+                icon: L.icon({
+                  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+                  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                  iconSize: [25, 41],
+                  shadowSize: [41, 41],
+                  iconAnchor: [12, 41],
+                  shadowAnchor: [13, 41],
+                  popupAnchor: [1, -34],
+                })
+              });
+              marker.bindPopup(`<div class="font-semibold">${mapLayer.layer_name}</div><div class="text-sm">${item.name || ''}</div>`);
+              layerGroup.addLayer(marker);
+            }
+          });
+        } else if (mapLayer.file_type === 'geojson') {
+          if (typeof mapLayer.file_data === 'string') {
+            const geoJSON = JSON.parse(mapLayer.file_data);
+            L.geoJSON(geoJSON, {
+              pointToLayer: (feature, latlng) => {
+                return L.marker(latlng);
+              },
+              style: () => ({
+                color: mapLayer.layer_color,
+                weight: 2,
+                opacity: 0.8,
+                fillOpacity: 0.3
+              }),
+              onEachFeature: (feature, layer) => {
+                if (feature.properties) {
+                  layer.bindPopup(JSON.stringify(feature.properties));
+                }
+              }
+            }).addTo(layerGroup);
+          }
+        }
+        
+        if (mapInstance.current && mapLayer.is_visible) {
+          layerGroup.addTo(mapInstance.current);
+        }
+        
+        const newLayer: Layer = {
+          id: `layer-${mapLayer.id}`,
+          name: mapLayer.layer_name,
+          layer: layerGroup,
+          visible: mapLayer.is_visible,
+          color: mapLayer.layer_color,
+          fileName: mapLayer.original_filename,
+          type: mapLayer.file_type as 'kml' | 'csv'
+        };
+        
+        setLayers(prev => {
+          const filtered = prev.filter(l => !l.id.startsWith('layer-'));
+          return [...filtered, newLayer];
+        });
+      } catch (err) {
+        console.error(`Error loading layer ${mapLayer.layer_name}:`, err);
+      }
+    });
+  }, [activeConfigId, mapLayers]);
 
   // Reset success message after timeout
   useEffect(() => {

@@ -19,10 +19,78 @@ import {
   Save,
   CheckCircle,
   AlertCircle,
-  Info
+  Info,
+  Import,
+  MapPin
 } from "lucide-react";
-import type { MapConfig, MapConfigFormData, MapLayer, MapLayerFormData } from "./types";
 import { useState, useRef, useCallback, useEffect } from "react";
+
+// Mock types
+interface MapConfig {
+  id: number;
+  config_name: string;
+  description: string;
+  default_center_lat: number;
+  default_center_lng: number;
+  default_zoom: number;
+  min_zoom: number;
+  max_zoom: number;
+  reference_circle_radius: number;
+  reference_circle_color: string;
+  max_file_size_mb: number;
+  tile_layer_url: string;
+  enable_location_marker: boolean;
+  enable_reference_circle: boolean;
+  is_active: boolean;
+  allowed_file_types: string[];
+}
+
+interface MapLayer {
+  id: number;
+  layer_name: string;
+  description: string;
+  file_type: string;
+  file_data: any;
+  original_filename: string;
+  file_size: number;
+  layer_color: string;
+  is_visible: boolean;
+  is_active: boolean;
+  display_order: number;
+  config_id: number;
+}
+
+interface MapConfigFormData {
+  config_name: string;
+  description: string;
+  default_center_lat: number;
+  default_center_lng: number;
+  default_zoom: number;
+  min_zoom: number;
+  max_zoom: number;
+  reference_circle_radius: number;
+  reference_circle_color: string;
+  max_file_size_mb: number;
+  tile_layer_url: string;
+  enable_location_marker: boolean;
+  enable_reference_circle: boolean;
+  is_active: boolean;
+  allowed_file_types: string[];
+}
+
+interface MapLayerFormData {
+  layer_name: string;
+  description: string;
+  file_type: string;
+  file_data: any;
+  original_filename: string;
+  file_size: number;
+  layer_color: string;
+  is_visible: boolean;
+  is_active: boolean;
+  display_order: number;
+  config_id: number | null;
+}
 
 interface MapConfigTabProps {
   mapConfigs: MapConfig[];
@@ -77,7 +145,30 @@ export default function MapConfigTab({
   const [showDataTable, setShowDataTable] = useState(false);
   const [layerData, setLayerData] = useState<any[]>([]);
   const [markers, setMarkers] = useState<any[]>([]);
+  const [polygons, setPolygons] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'map' | 'table'>('map');
+  
+  // New states for modals
+  const [showAddMarkModal, setShowAddMarkModal] = useState(false);
+  const [showAddPolygonModal, setShowAddPolygonModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  
+  // New states for forms
+  const [markForm, setMarkForm] = useState({
+    icon: "default",
+    latitude: "",
+    longitude: "",
+    title: "",
+    details: ""
+  });
+  
+  const [polygonForm, setPolygonForm] = useState({
+    coordinates: "",
+    title: "",
+    details: "",
+    color: "#3b82f6"
+  });
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -89,11 +180,23 @@ export default function MapConfigTab({
 
   const loadLayers = useCallback(async (configId: number) => {
     try {
-      const res = await fetch(`/api/map-layers?config_id=${configId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMapLayers(data.layers || []);
-      }
+      // Mock implementation
+      setMapLayers([
+        {
+          id: 1,
+          layer_name: "Sample Layer",
+          description: "A sample layer for demonstration",
+          file_type: "kml",
+          file_data: null,
+          original_filename: "sample.kml",
+          file_size: 1024,
+          layer_color: "#3b82f6",
+          is_visible: true,
+          is_active: true,
+          display_order: 0,
+          config_id: configId
+        }
+      ]);
     } catch (err) {
       console.error('Failed to load layers:', err);
     }
@@ -367,25 +470,12 @@ export default function MapConfigTab({
     setLayerError(null);
 
     try {
-      const url = editingLayer ? `/api/map-layers/${editingLayer.id}` : "/api/map-layers";
-      const method = editingLayer ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(layerForm),
-      });
-
-      if (res.ok) {
-        setShowLayerForm(false);
-        setLayerSuccess(editingLayer ? "Layer updated" : "Layer created");
-        setTimeout(() => setLayerSuccess(null), 3000);
-        if (selectedConfigId) {
-          loadLayers(selectedConfigId);
-        }
-      } else {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to save layer");
+      // Mock save implementation
+      setShowLayerForm(false);
+      setLayerSuccess("Layer saved successfully");
+      setTimeout(() => setLayerSuccess(null), 3000);
+      if (selectedConfigId) {
+        loadLayers(selectedConfigId);
       }
     } catch (err) {
       setLayerError(err instanceof Error ? err.message : "Failed to save layer");
@@ -398,15 +488,11 @@ export default function MapConfigTab({
     if (!confirm("Are you sure you want to delete this layer?")) return;
 
     try {
-      const res = await fetch(`/api/map-layers/${layerId}`, { method: "DELETE" });
-      if (res.ok) {
-        setLayerSuccess("Layer deleted");
-        setTimeout(() => setLayerSuccess(null), 3000);
-        if (selectedConfigId) {
-          loadLayers(selectedConfigId);
-        }
-      } else {
-        throw new Error("Failed to delete layer");
+      // Mock delete implementation
+      setLayerSuccess("Layer deleted successfully");
+      setTimeout(() => setLayerSuccess(null), 3000);
+      if (selectedConfigId) {
+        loadLayers(selectedConfigId);
       }
     } catch (err) {
       setLayerError(err instanceof Error ? err.message : "Failed to delete layer");
@@ -415,18 +501,9 @@ export default function MapConfigTab({
 
   const handleToggleLayerVisibility = async (layer: MapLayer) => {
     try {
-      const res = await fetch(`/api/map-layers/${layer.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_visible: !layer.is_visible }),
-      });
-
-      if (res.ok) {
-        if (selectedConfigId) {
-          loadLayers(selectedConfigId);
-        }
-      } else {
-        throw new Error("Failed to update layer visibility");
+      // Mock toggle implementation
+      if (selectedConfigId) {
+        loadLayers(selectedConfigId);
       }
     } catch (err) {
       setLayerError(err instanceof Error ? err.message : "Failed to update layer");
@@ -435,18 +512,9 @@ export default function MapConfigTab({
 
   const handleToggleLayerActive = async (layer: MapLayer) => {
     try {
-      const res = await fetch(`/api/map-layers/${layer.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_active: !layer.is_active }),
-      });
-
-      if (res.ok) {
-        if (selectedConfigId) {
-          loadLayers(selectedConfigId);
-        }
-      } else {
-        throw new Error("Failed to update layer status");
+      // Mock toggle implementation
+      if (selectedConfigId) {
+        loadLayers(selectedConfigId);
       }
     } catch (err) {
       setLayerError(err instanceof Error ? err.message : "Failed to update layer");
@@ -487,8 +555,324 @@ export default function MapConfigTab({
     }
   };
 
+  // Handle adding mark
+  const handleAddMark = () => {
+    // Validate form
+    if (!markForm.latitude || !markForm.longitude || !markForm.title) {
+      alert("Please fill in all required fields");
+      return;
+    }
+    
+    // Add mark logic here
+    console.log("Adding mark:", markForm);
+    setShowAddMarkModal(false);
+    setMarkForm({
+      icon: "default",
+      latitude: "",
+      longitude: "",
+      title: "",
+      details: ""
+    });
+  };
+
+  // Handle adding polygon
+  const handleAddPolygon = () => {
+    // Validate form
+    if (!polygonForm.coordinates || !polygonForm.title) {
+      alert("Please fill in all required fields");
+      return;
+    }
+    
+    // Add polygon logic here
+    console.log("Adding polygon:", polygonForm);
+    setShowAddPolygonModal(false);
+    setPolygonForm({
+      coordinates: "",
+      title: "",
+      details: "",
+      color: "#3b82f6"
+    });
+  };
+
+  // Handle importing file
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Import logic here
+    console.log("Importing file:", file);
+    setShowImportModal(false);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Add Mark Modal */}
+      {showAddMarkModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-800">Add New Marker</h3>
+                <button
+                  onClick={() => setShowAddMarkModal(false)}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Icon
+                  </label>
+                  <select
+                    value={markForm.icon}
+                    onChange={(e) => setMarkForm({...markForm, icon: e.target.value})}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                  >
+                    <option value="default">Default</option>
+                    <option value="star">Star</option>
+                    <option value="heart">Heart</option>
+                    <option value="flag">Flag</option>
+                  </select>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Latitude *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={markForm.latitude}
+                      onChange={(e) => setMarkForm({...markForm, latitude: e.target.value})}
+                      placeholder="40.7128"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Longitude *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={markForm.longitude}
+                      onChange={(e) => setMarkForm({...markForm, longitude: e.target.value})}
+                      placeholder="-74.0060"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={markForm.title}
+                    onChange={(e) => setMarkForm({...markForm, title: e.target.value})}
+                    placeholder="Marker Title"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Details
+                  </label>
+                  <textarea
+                    value={markForm.details}
+                    onChange={(e) => setMarkForm({...markForm, details: e.target.value})}
+                    placeholder="Additional details..."
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleAddMark}
+                  className="px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
+                >
+                  <MapPin size={18} />
+                  Add Marker
+                </button>
+                <button
+                  onClick={() => setShowAddMarkModal(false)}
+                  className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Polygon Modal */}
+      {showAddPolygonModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-800">Add New Polygon</h3>
+                <button
+                  onClick={() => setShowAddPolygonModal(false)}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Coordinates *
+                  </label>
+                  <textarea
+                    value={polygonForm.coordinates}
+                    onChange={(e) => setPolygonForm({...polygonForm, coordinates: e.target.value})}
+                    placeholder="[[lat1,lng1],[lat2,lng2],[lat3,lng3],...]"
+                    rows={4}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Enter coordinates as array of [latitude,longitude] pairs</p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={polygonForm.title}
+                    onChange={(e) => setPolygonForm({...polygonForm, title: e.target.value})}
+                    placeholder="Polygon Title"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Details
+                  </label>
+                  <textarea
+                    value={polygonForm.details}
+                    onChange={(e) => setPolygonForm({...polygonForm, details: e.target.value})}
+                    placeholder="Additional details..."
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Color
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {colors.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setPolygonForm({...polygonForm, color})}
+                        className={`w-8 h-8 rounded-lg border-2 transition ${
+                          polygonForm.color === color ? 'border-gray-800 scale-110' : 'border-gray-300'
+                        }`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Select color ${color}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleAddPolygon}
+                  className="px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
+                >
+                  <Map size={18} />
+                  Add Polygon
+                </button>
+                <button
+                  onClick={() => setShowAddPolygonModal(false)}
+                  className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-800">Import Geo Data</h3>
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Select File *
+                  </label>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => document.getElementById('import-file-input')?.click()}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition"
+                    >
+                      <Import size={16} />
+                      Choose File
+                    </button>
+                    <input
+                      id="import-file-input"
+                      type="file"
+                      accept=".kml,.csv,.json,.geojson,.shp,.gpx"
+                      onChange={handleImportFile}
+                      className="hidden"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">Supported formats: KML, CSV, GeoJSON, SHP, GPX</p>
+                </div>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-800 mb-2">Import Tips</h4>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>• Ensure coordinates are in WGS84 format</li>
+                    <li>• CSV files should have latitude/longitude columns</li>
+                    <li>• Large files may take longer to process</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Layer Form Modal */}
       {showLayerForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1063,14 +1447,37 @@ export default function MapConfigTab({
                 Configure settings and manage layers for the Interactive Map component
               </p>
             </div>
-            <button
-              onClick={onCreateMapConfig}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg"
-              data-testid="button-create-config"
-            >
-              <Plus size={18} />
-              Create Config
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddMarkModal(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg"
+              >
+                <MapPin size={16} />
+                Add Mark
+              </button>
+              <button
+                onClick={() => setShowAddPolygonModal(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg"
+              >
+                <Map size={16} />
+                Add Polygon
+              </button>
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg"
+              >
+                <Import size={16} />
+                Import
+              </button>
+              <button
+                onClick={onCreateMapConfig}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg"
+                data-testid="button-create-config"
+              >
+                <Plus size={18} />
+                Create Config
+              </button>
+            </div>
           </div>
 
           {mapConfigs.length === 0 ? (

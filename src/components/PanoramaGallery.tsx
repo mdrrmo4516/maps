@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { ReactPhotoSphereViewer } from "react-photo-sphere-viewer";
 import "photo-sphere-viewer/dist/photo-sphere-viewer.css";
+import { panoramaService } from "../lib/supabase-service";
 
 declare global {
   interface Window {
@@ -59,7 +60,7 @@ export default function PanoramaGallery({
   const fullscreenRef = useRef<HTMLDivElement>(null);
 
   // Filter images based on search query
-  const filteredImages = images.filter(image => 
+  const filteredImages = images.filter(image =>
     image.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (image.description && image.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
@@ -67,40 +68,58 @@ export default function PanoramaGallery({
   useEffect(() => {
     const abortController = new AbortController();
     let isMounted = true;
-    
+
     const fetchImages = async () => {
       setLoading(true);
       setError(null);
 
       try {
         if (useSupabase) {
-          const response = await fetch("/api/panoramas", {
-            signal: abortController.signal
-          });
-          
-          if (!isMounted) return;
-          
-          if (!response.ok) {
-            console.error(`Failed to fetch panoramas: ${response.status} ${response.statusText}`);
-            setImages([]);
-            setLoading(false);
-            return;
+          try {
+            // Use the data service to fetch panoramas
+            const panoramas = await panoramaService.getAll();
+
+            if (!isMounted) return;
+
+            const fetchedImages = panoramas.map((panorama) => ({
+              id: String(panorama.id),
+              name: panorama.name,
+              url: panorama.image_url,
+              thumbnailUrl: panorama.thumbnail_url || panorama.image_url,
+              description: panorama.description,
+              date: panorama.created_at ? new Date(panorama.created_at).toLocaleDateString() : undefined,
+            }));
+
+            setImages(fetchedImages);
+          } catch (serviceError) {
+            console.error("Error fetching from data service:", serviceError);
+            // Fall back to fetch if service fails
+            const response = await fetch("/api/panoramas");
+
+            if (!isMounted) return;
+
+            if (!response.ok) {
+              console.error(`Failed to fetch panoramas: ${response.status} ${response.statusText}`);
+              setImages([]);
+              setLoading(false);
+              return;
+            }
+
+            const data = await response.json();
+
+            if (!isMounted) return;
+
+            const fetchedImages = (data.panoramas || []).map((panorama: any) => ({
+              id: String(panorama.id),
+              name: panorama.name,
+              url: panorama.image_url,
+              thumbnailUrl: panorama.thumbnail_url || panorama.image_url,
+              description: panorama.description,
+              date: panorama.created_at ? new Date(panorama.created_at).toLocaleDateString() : undefined,
+            }));
+
+            setImages(fetchedImages);
           }
-
-          const data = await response.json();
-          
-          if (!isMounted) return;
-          
-          const fetchedImages = (data.panoramas || []).map((panorama: any) => ({
-            id: String(panorama.id),
-            name: panorama.name,
-            url: panorama.image_url,
-            thumbnailUrl: panorama.thumbnail_url || panorama.image_url,
-            description: panorama.description,
-            date: panorama.created_at ? new Date(panorama.created_at).toLocaleDateString() : undefined,
-          }));
-
-          setImages(fetchedImages);
         } else {
           if (!folderId) {
             setError("No folder ID provided");
@@ -162,7 +181,7 @@ export default function PanoramaGallery({
     };
 
     fetchImages();
-    
+
     return () => {
       isMounted = false;
       abortController.abort();
@@ -179,7 +198,7 @@ export default function PanoramaGallery({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!selectedImage) return;
-      
+
       switch (e.key) {
         case "Escape":
           closePanorama();
@@ -214,7 +233,7 @@ export default function PanoramaGallery({
 
   const navigateImage = (direction: number) => {
     if (!selectedImage || filteredImages.length === 0) return;
-    
+
     const newIndex = (currentIndex + direction + filteredImages.length) % filteredImages.length;
     setCurrentIndex(newIndex);
     setSelectedImage(filteredImages[newIndex]);
@@ -245,7 +264,7 @@ export default function PanoramaGallery({
 
   const toggleFullscreen = () => {
     if (!fullscreenRef.current) return;
-    
+
     if (!document.fullscreenElement) {
       fullscreenRef.current.requestFullscreen().catch(err => {
         console.error(`Error attempting to enable fullscreen: ${err.message}`);
@@ -263,6 +282,17 @@ export default function PanoramaGallery({
     return filename.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
   };
 
+  // Handler for when the panorama viewer is ready
+  const handleReady = () => {
+    setViewerLoaded(true);
+  };
+
+  // Handler for errors in the panorama viewer
+  const handleError = (error: any) => {
+    console.error("Panorama viewer error:", error);
+    setViewerLoaded(false);
+  };
+
   return (
     <div className="w-full h-full bg-gradient-to-br from-slate-50 to-blue-50/20 backdrop-blur-sm rounded-3xl shadow-2xl p-6 border border-white/50">
       <div className="mb-6">
@@ -271,7 +301,7 @@ export default function PanoramaGallery({
             <h2 className="text-3xl font-bold text-[#1a1a2e] mb-1">{title}</h2>
             <div className="h-1 w-24 bg-gradient-to-r from-sky-400 to-blue-600 rounded-full"></div>
           </div>
-          
+
           <div className="flex flex-wrap gap-3">
             <div className="relative">
               <input
@@ -283,21 +313,20 @@ export default function PanoramaGallery({
               />
               <Info className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             </div>
-            
+
             <button
               onClick={() => setShowThumbnails(!showThumbnails)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
-                showThumbnails 
-                  ? 'bg-blue-500 text-white' 
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${showThumbnails
+                  ? 'bg-blue-500 text-white'
                   : 'bg-white/80 text-gray-700 hover:bg-white'
-              } shadow-sm`}
+                } shadow-sm`}
             >
               {showThumbnails ? <Eye className="w-4 h-4" /> : <ImageOff className="w-4 h-4" />}
               <span className="hidden sm:inline">{showThumbnails ? 'Hide' : 'Show'} Thumbnails</span>
             </button>
           </div>
         </div>
-        
+
         {filteredImages.length > 0 && (
           <div className="text-sm text-gray-600">
             Showing {filteredImages.length} of {images.length} panoramas
@@ -341,8 +370,8 @@ export default function PanoramaGallery({
               No panorama images found
             </p>
             <p className="text-[#1a1a2e]/50 text-sm mb-4">
-              {searchQuery 
-                ? "Try adjusting your search terms" 
+              {searchQuery
+                ? "Try adjusting your search terms"
                 : "Panoramas can be added through the Admin Panel"}
             </p>
             {searchQuery && (
@@ -413,9 +442,8 @@ export default function PanoramaGallery({
       {selectedImage && (
         <div
           ref={fullscreenRef}
-          className={`fixed inset-0 bg-black/95 z-50 flex flex-col backdrop-blur-sm ${
-            isFullscreen ? 'overflow-hidden' : ''
-          }`}
+          className={`fixed inset-0 bg-black/95 z-50 flex flex-col backdrop-blur-sm ${isFullscreen ? 'overflow-hidden' : ''
+            }`}
           data-testid="panorama-viewer-modal"
         >
           <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
@@ -424,7 +452,7 @@ export default function PanoramaGallery({
                 {getCleanFilename(selectedImage.name)}
               </span>
             </div>
-            
+
             <div className="flex gap-2">
               <button
                 className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-md"
@@ -479,26 +507,21 @@ export default function PanoramaGallery({
                 </div>
               </div>
             )}
-            
+
             <div className="w-full h-full rounded-2xl overflow-hidden relative">
               <ReactPhotoSphereViewer
                 src={selectedImage.url}
                 height="100%"
                 width="100%"
-                onReady={() => setViewerLoaded(true)}
-                onError={() => {
-                  setError("Failed to load panorama");
-                  setViewerLoaded(true);
-                }}
-                options={{
-                  navbar: false,
-                  defaultZoomLvl: 50,
-                  minZoomLvl: 10,
-                  maxZoomLvl: 100,
-                  autorotate: false,
-                  mousewheel: true,
-                  touchmove: true,
-                }}
+                onReady={handleReady}
+                onError={handleError}
+                navbar={false}
+                defaultZoomLvl={50}
+                minZoomLvl={10}
+                maxZoomLvl={100}
+                autorotate={false}
+                mousewheel={true}
+                touchmove={true}
               />
             </div>
           </div>
@@ -508,16 +531,15 @@ export default function PanoramaGallery({
               <button
                 onClick={() => navigateImage(-1)}
                 disabled={filteredImages.length <= 1}
-                className={`p-2 rounded-full ${
-                  filteredImages.length > 1
+                className={`p-2 rounded-full ${filteredImages.length > 1
                     ? 'bg-white/20 hover:bg-white/30 text-white'
                     : 'text-white/30 cursor-not-allowed'
-                }`}
+                  }`}
                 title="Previous image"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
-              
+
               <div className="text-center max-w-2xl">
                 {selectedImage.description && (
                   <p className="text-white/90 mb-2">{selectedImage.description}</p>
@@ -529,21 +551,20 @@ export default function PanoramaGallery({
                   <span className="bg-white/10 px-3 py-1 rounded-full">F for fullscreen</span>
                 </div>
               </div>
-              
+
               <button
                 onClick={() => navigateImage(1)}
                 disabled={filteredImages.length <= 1}
-                className={`p-2 rounded-full ${
-                  filteredImages.length > 1
+                className={`p-2 rounded-full ${filteredImages.length > 1
                     ? 'bg-white/20 hover:bg-white/30 text-white'
                     : 'text-white/30 cursor-not-allowed'
-                }`}
+                  }`}
                 title="Next image"
               >
                 <ChevronRight className="w-6 h-6" />
               </button>
             </div>
-            
+
             <div className="text-center text-white/70 text-sm">
               {currentIndex + 1} of {filteredImages.length}
             </div>

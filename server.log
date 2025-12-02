@@ -1,4 +1,4 @@
-[dotenv@17.2.3] injecting env (5) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.2.3] injecting env (5) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
 ℹ Optional environment variables not set (features disabled):
   ⚠ NODE_ENV: Deployment environment (default: development)
 
@@ -8,3 +8,267 @@
 ✓ DATABASE_URL configured (Supabase PostgreSQL)
 Backend API server listening on port 3001
 Serving static frontend from /workspaces/map-directory/dist
+Create sidebar button error error: column "source_type" of relation "sidebar_buttons" does not exist
+    at /workspaces/map-directory/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async file:///workspaces/map-directory/server/index.js:567:20 {
+  length: 139,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '59',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_target.c',
+  line: '1065',
+  routine: 'checkInsertTargets'
+}
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Get user error: Error: DATABASE_URL not configured
+    at getClient (file:///workspaces/map-directory/server/rbac-middleware.js:6:28)
+    at getUserByAuthId (file:///workspaces/map-directory/server/rbac-middleware.js:14:14)
+    at file:///workspaces/map-directory/server/rbac-middleware.js:64:24
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at next (/workspaces/map-directory/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/workspaces/map-directory/node_modules/router/lib/route.js:117:3)
+    at handle (/workspaces/map-directory/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/workspaces/map-directory/node_modules/router/lib/layer.js:152:17)
+    at /workspaces/map-directory/node_modules/router/index.js:295:15
+    at processParams (/workspaces/map-directory/node_modules/router/index.js:582:12)
+Create sidebar button error error: duplicate key value violates unique constraint "sidebar_buttons_button_id_key"
+    at /workspaces/map-directory/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async file:///workspaces/map-directory/server/index.js:567:20 {
+  length: 242,
+  severity: 'ERROR',
+  code: '23505',
+  detail: 'Key (button_id)=(test-btn) already exists.',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'sidebar_buttons',
+  column: undefined,
+  dataType: undefined,
+  constraint: 'sidebar_buttons_button_id_key',
+  file: 'nbtinsert.c',
+  line: '666',
+  routine: '_bt_check_unique'
+}
+Create sidebar button error error: duplicate key value violates unique constraint "sidebar_buttons_button_id_key"
+    at /workspaces/map-directory/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async file:///workspaces/map-directory/server/index.js:567:20 {
+  length: 242,
+  severity: 'ERROR',
+  code: '23505',
+  detail: 'Key (button_id)=(test-btn) already exists.',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'sidebar_buttons',
+  column: undefined,
+  dataType: undefined,
+  constraint: 'sidebar_buttons_button_id_key',
+  file: 'nbtinsert.c',
+  line: '666',
+  routine: '_bt_check_unique'
+}
+Create sidebar button error error: duplicate key value violates unique constraint "sidebar_buttons_button_id_key"
+    at /workspaces/map-directory/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async file:///workspaces/map-directory/server/index.js:567:20 {
+  length: 242,
+  severity: 'ERROR',
+  code: '23505',
+  detail: 'Key (button_id)=(test-btn) already exists.',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'sidebar_buttons',
+  column: undefined,
+  dataType: undefined,
+  constraint: 'sidebar_buttons_button_id_key',
+  file: 'nbtinsert.c',
+  line: '666',
+  routine: '_bt_check_unique'
+}
+Create sidebar button error error: duplicate key value violates unique constraint "sidebar_buttons_button_id_key"
+    at /workspaces/map-directory/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async file:///workspaces/map-directory/server/index.js:567:20 {
+  length: 242,
+  severity: 'ERROR',
+  code: '23505',
+  detail: 'Key (button_id)=(test-btn) already exists.',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'sidebar_buttons',
+  column: undefined,
+  dataType: undefined,
+  constraint: 'sidebar_buttons_button_id_key',
+  file: 'nbtinsert.c',
+  line: '666',
+  routine: '_bt_check_unique'
+}
+Create sidebar button error error: duplicate key value violates unique constraint "sidebar_buttons_button_id_key"
+    at /workspaces/map-directory/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async file:///workspaces/map-directory/server/index.js:567:20 {
+  length: 242,
+  severity: 'ERROR',
+  code: '23505',
+  detail: 'Key (button_id)=(test-btn) already exists.',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'sidebar_buttons',
+  column: undefined,
+  dataType: undefined,
+  constraint: 'sidebar_buttons_button_id_key',
+  file: 'nbtinsert.c',
+  line: '666',
+  routine: '_bt_check_unique'
+}

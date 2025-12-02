@@ -3,6 +3,10 @@ import { Client } from 'pg';
 import { existsSync } from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import os from 'os';
+import multer from 'multer';
+import { createClient } from '@supabase/supabase-js';
 import { 
   getUserByAuthId, 
   requirePermission, 
@@ -30,6 +34,7 @@ if (missing.length > 0) {
 const OPTIONAL_ENVS = {
   'GOOGLE_DRIVE_API_KEY': 'Google Drive image loader (optional)',
   'VITE_GOOGLE_DRIVE_API_KEY': 'Frontend Google Drive API key (optional)',
+  'SUPABASE_SERVICE_ROLE_KEY': 'Supabase service role key (server-side uploads, keep secret)',
   'NODE_ENV': 'Deployment environment (default: development)'
 };
 const optionalWarnings = [];
@@ -50,6 +55,25 @@ console.log(`   Port: ${process.env.PORT || 3001}`);
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
+
+// Multer for handling multipart/form-data uploads (temporary files)
+const upload = multer({ dest: os.tmpdir() });
+
+// Supabase service client (server-side) — optional but recommended for uploads
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+let supabaseService = null;
+if (process.env.VITE_SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+  try {
+    supabaseService = createClient(process.env.VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false }
+    });
+    console.log('✓ Supabase service client configured for server-side operations');
+  } catch (e) {
+    console.warn('⚠ Failed to initialize Supabase service client', e?.message || e);
+  }
+} else {
+  console.log('ℹ Supabase service client not configured. Server-side uploads disabled.');
+}
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -308,6 +332,72 @@ app.delete('/api/map-pages/:id', async (req, res) => {
 // SPATIAL FILES ENDPOINTS
 // =====================
 
+// Server-side upload endpoint: accepts multipart/form-data with field `file`.
+// Uploads file to Supabase Storage (if configured) and stores metadata in DB.
+app.post('/api/spatial-files/upload', upload.single('file'), async (req, res) => {
+  const file = req.file;
+  const { category = 'uncategorized', description = '', file_type: providedFileType } = req.body || {};
+
+  if (!file) {
+    return res.status(400).json({ error: 'Missing file upload' });
+  }
+
+  const originalName = file.originalname || file.filename;
+  const fileSize = file.size || 0;
+  const ext = (originalName.split('.').pop() || '').toLowerCase();
+  const fileType = providedFileType || (ext === 'kml' ? 'kml' : ext === 'csv' ? 'csv' : (ext === 'geojson' || ext === 'json') ? 'geojson' : ext);
+
+  let client;
+  try {
+    // If supabase service is available, upload the file to storage
+    let storedPath = `${Date.now()}_${originalName}`;
+    let publicUrl = storedPath;
+
+    if (supabaseService) {
+      const bucket = 'spatial-files';
+      // Ensure bucket exists or assume created externally
+      const fileStream = fs.createReadStream(file.path);
+      const { error: uploadError } = await supabaseService.storage.from(bucket).upload(storedPath, fileStream, { upsert: true, contentType: file.mimetype });
+      if (uploadError) {
+        console.warn('Supabase storage upload error', uploadError.message || uploadError);
+      } else {
+        const { data: urlData } = supabaseService.storage.from(bucket).getPublicUrl(storedPath);
+        if (urlData && urlData.publicUrl) publicUrl = urlData.publicUrl;
+      }
+    }
+
+    // Insert metadata into spatial_files table (include optional geojson_data)
+    const geojsonRaw = req.body.geojson_data;
+    let geojsonParsed = null;
+    if (geojsonRaw) {
+      try {
+        geojsonParsed = typeof geojsonRaw === 'string' ? JSON.parse(geojsonRaw) : geojsonRaw;
+      } catch (e) {
+        console.warn('Invalid geojson_data provided in upload request');
+      }
+    }
+
+    client = getClient();
+    await client.connect();
+    const result = await client.query(
+      `INSERT INTO spatial_files (filename, original_name, file_type, category, description, file_size, geojson_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [publicUrl, originalName, fileType, category, description, fileSize, geojsonParsed]
+    );
+
+    // Remove temp file
+    try { fs.unlinkSync(file.path); } catch (e) {}
+
+    await client.end();
+    res.json({ success: true, file: result.rows[0] });
+  } catch (err) {
+    if (client) try { await client.end(); } catch (e) {}
+    console.error('Server upload error', err);
+    try { fs.unlinkSync(file.path); } catch (e) {}
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // Get all spatial files
 app.get('/api/spatial-files', async (req, res) => {
   let client;
@@ -553,8 +643,57 @@ app.get('/api/sidebar-buttons', async (req, res) => {
   }
 });
 
-// Create sidebar button
-app.post('/api/sidebar-buttons', async (req, res) => {
+// Get signed URL for sidebar button file (if stored in Supabase Storage)
+app.get('/api/sidebar-buttons/:id/signed-url', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+
+  let client;
+  try {
+    client = getClient();
+    await client.connect();
+    const result = await client.query('SELECT id, label FROM sidebar_buttons WHERE id = $1', [id]);
+    await client.end();
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Sidebar button not found' });
+    }
+
+    // If Supabase service is available, generate a signed URL
+    if (!supabaseService) {
+      return res.status(400).json({ error: 'Supabase service not configured' });
+    }
+
+    // Assume stored path follows pattern: sidebar-buttons/{id}/file
+    const storagePath = `sidebar-buttons/${id}/file`;
+    const bucket = 'sidebar-files'; // Adjust bucket name as needed
+
+    // Generate signed URL valid for 7 days (604800 seconds)
+    const { data: signedUrlData, error: signedError } = await supabaseService
+      .storage.from(bucket)
+      .createSignedUrl(storagePath, 604800);
+
+    if (signedError) {
+      console.warn('Failed to generate signed URL:', signedError.message || signedError);
+      return res.status(500).json({ error: 'Failed to generate signed URL' });
+    }
+
+    res.json({
+      success: true,
+      signedUrl: signedUrlData?.signedUrl || null,
+      expiresIn: 604800
+    });
+  } catch (err) {
+    if (client) try { await client.end(); } catch {}
+    console.error('Generate signed URL error', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Create sidebar button (RBAC: requires create_sidebar_buttons permission)
+app.post('/api/sidebar-buttons', requirePermission('create_sidebar_buttons'), async (req, res) => {
   const { button_id, label, folder_id, source_type, is_enabled, order_index } = req.body;
   if (!button_id || !label || !folder_id) {
     return res.status(400).json({ error: 'Missing required fields: button_id, label, folder_id' });
@@ -571,6 +710,16 @@ app.post('/api/sidebar-buttons', async (req, res) => {
       [button_id, label, folder_id, source_type || 'drive', is_enabled !== false, order_index || 0]
     );
     await client.end();
+
+    // Log the action
+    if (req.user && req.user.id) {
+      await logAction(req.user.id, 'CREATE', 'sidebar_buttons', {
+        button_id,
+        label,
+        folder_id
+      }, req.ip);
+    }
+
     res.json({ success: true, button: result.rows[0] });
   } catch (err) {
     if (client) try { await client.end(); } catch {}
@@ -579,8 +728,8 @@ app.post('/api/sidebar-buttons', async (req, res) => {
   }
 });
 
-// Update sidebar button
-app.put('/api/sidebar-buttons/:id', async (req, res) => {
+// Update sidebar button (RBAC: requires update_sidebar_buttons permission)
+app.put('/api/sidebar-buttons/:id', requirePermission('update_sidebar_buttons'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     return res.status(400).json({ error: 'Invalid ID' });
@@ -609,6 +758,16 @@ app.put('/api/sidebar-buttons/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Sidebar button not found' });
     }
+
+    // Log the action
+    if (req.user && req.user.id) {
+      await logAction(req.user.id, 'UPDATE', 'sidebar_buttons', {
+        id,
+        label,
+        folder_id
+      }, req.ip);
+    }
+
     res.json({ success: true, button: result.rows[0] });
   } catch (err) {
     if (client) try { await client.end(); } catch {}
@@ -617,8 +776,8 @@ app.put('/api/sidebar-buttons/:id', async (req, res) => {
   }
 });
 
-// Delete sidebar button
-app.delete('/api/sidebar-buttons/:id', async (req, res) => {
+// Delete sidebar button (RBAC: requires delete_sidebar_buttons permission)
+app.delete('/api/sidebar-buttons/:id', requirePermission('delete_sidebar_buttons'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     return res.status(400).json({ error: 'Invalid ID' });
@@ -633,6 +792,14 @@ app.delete('/api/sidebar-buttons/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Sidebar button not found' });
     }
+
+    // Log the action
+    if (req.user && req.user.id) {
+      await logAction(req.user.id, 'DELETE', 'sidebar_buttons', {
+        id
+      }, req.ip);
+    }
+
     res.json({ success: true, deleted: true });
   } catch (err) {
     if (client) try { await client.end(); } catch {}

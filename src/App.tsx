@@ -19,6 +19,40 @@ interface CustomButton {
   order_index: number;
 }
 
+interface MapConfig {
+  id: number;
+  config_name: string;
+  description: string;
+  default_center_lat: number;
+  default_center_lng: number;
+  default_zoom: number;
+  min_zoom: number;
+  max_zoom: number;
+  reference_circle_radius: number;
+  reference_circle_color: string;
+  max_file_size_mb: number;
+  tile_layer_url: string;
+  enable_location_marker: boolean;
+  enable_reference_circle: boolean;
+  is_active: boolean;
+  allowed_file_types: string[];
+}
+
+interface MapLayer {
+  id: number;
+  layer_name: string;
+  description: string;
+  file_type: string;
+  file_data: any;
+  original_filename: string;
+  file_size: number;
+  layer_color: string;
+  is_visible: boolean;
+  is_active: boolean;
+  display_order: number;
+  config_id: number;
+}
+
 function AppContent() {
   const { user, loading } = useAuth();
   const [activeView, setActiveView] = useState('panorama');
@@ -27,6 +61,9 @@ function AppContent() {
   const [sidebarRefresh, setSidebarRefresh] = useState(0);
   const [customButtons, setCustomButtons] = useState<CustomButton[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [mapConfigs, setMapConfigs] = useState<MapConfig[]>([]);
+  const [mapLayers, setMapLayers] = useState<MapLayer[]>([]);
+  const [activeConfigId, setActiveConfigId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchCustomButtons = async () => {
@@ -46,6 +83,38 @@ function AppContent() {
 
     fetchCustomButtons();
   }, [sidebarRefresh]);
+
+  // Fetch map configs and layers
+  useEffect(() => {
+    const fetchMapData = async () => {
+      try {
+        const [configsRes, layersRes] = await Promise.all([
+          fetch('/api/map-configs'),
+          fetch('/api/map-layers')
+        ]);
+        
+        if (configsRes.ok) {
+          const configsData = await configsRes.json();
+          setMapConfigs(configsData.configs || []);
+          
+          // Set active config ID
+          const activeConfig = (configsData.configs || []).find((c: MapConfig) => c.is_active);
+          if (activeConfig) {
+            setActiveConfigId(activeConfig.id);
+          }
+        }
+        
+        if (layersRes.ok) {
+          const layersData = await layersRes.json();
+          setMapLayers(layersData.layers || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch map data:', error);
+      }
+    };
+
+    fetchMapData();
+  }, []);
 
 
   useEffect(() => {
@@ -90,7 +159,13 @@ function AppContent() {
     }
 
     if (activeView === 'interactive') {
-      return <InteractiveMap />;
+      return (
+        <InteractiveMap 
+          mapConfigs={mapConfigs}
+          activeConfigId={activeConfigId}
+          mapLayers={mapLayers}
+        />
+      );
     }
 
     // For the main panorama view, use Supabase instead of Google Drive

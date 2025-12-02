@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.vite
+.parcel-cache
+.next
+coverage
+*.log
+.DS_Store
+.env.local
+.env.*.local
+*.tsbuildinfo

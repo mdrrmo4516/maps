@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import RBACManagement from "./RBACManagement";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import {
   PagesTab,
   DatabaseTab,
@@ -204,10 +205,12 @@ export default function AdminPanel({
           setSettings(data.settings || {});
         }
       } else if (activeTab === "sidebar") {
-        const res = await fetch("/api/sidebar-buttons");
+        const res = await fetch('/api/sidebar-buttons');
         if (res.ok) {
           const data = await res.json();
           setSidebarButtons(data.buttons || []);
+        } else {
+          throw new Error('Failed to load sidebar buttons');
         }
       } else if (activeTab === "panoramas") {
         const res = await fetch("/api/panoramas/admin");
@@ -466,62 +469,50 @@ export default function AdminPanel({
   const processFiles = async (files: File[]) => {
     setUploadingFile(true);
     setError(null);
-
     for (const file of files) {
-      const ext = file.name.split(".").pop()?.toLowerCase();
-      let fileType = "";
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      let fileType = ext === 'kml' ? 'kml' : ext === 'csv' ? 'csv' : (ext === 'geojson' || ext === 'json') ? 'geojson' : ext;
       let geojsonData: object | null = null;
 
-      if (ext === "kml") {
-        fileType = "kml";
-        const text = await file.text();
-        geojsonData = parseKMLToGeoJSON(text);
-      } else if (ext === "geojson" || ext === "json") {
-        fileType = "geojson";
-        const text = await file.text();
-        try {
-          geojsonData = JSON.parse(text);
-        } catch {
-          setError(`Invalid JSON in file: ${file.name}`);
-          continue;
-        }
-      } else if (ext === "csv") {
-        fileType = "csv";
-      } else {
-        setError(`Unsupported file type: ${ext}`);
-        continue;
-      }
-
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("filename", `${Date.now()}_${file.name}`);
-        formData.append("original_name", file.name);
-        formData.append("file_type", fileType);
-        formData.append("category", "uncategorized");
-        formData.append("description", "");
-        formData.append("file_size", file.size.toString());
-
-        if (geojsonData) {
-          formData.append("geojson_data", JSON.stringify(geojsonData));
+        // Parse KML/GeoJSON/CSV client-side to attach geojson_data when possible
+        if (ext === 'kml') {
+          const text = await file.text();
+          geojsonData = parseKMLToGeoJSON(text);
+        } else if (ext === 'geojson' || ext === 'json') {
+          const text = await file.text();
+          try { geojsonData = JSON.parse(text); } catch {}
+        } else if (ext === 'csv') {
+          const text = await file.text();
+          geojsonData = parseCSVToGeoJSON(text);
         }
 
-        const res = await fetch("/api/spatial-files", {
-          method: "POST",
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('original_name', file.name);
+        formData.append('file_type', fileType);
+        formData.append('category', 'uncategorized');
+        formData.append('description', '');
+        formData.append('file_size', String(file.size));
+        if (geojsonData) formData.append('geojson_data', JSON.stringify(geojsonData));
+
+        const res = await fetch('/api/spatial-files/upload', {
+          method: 'POST',
           body: formData,
         });
 
-        if (!res.ok) throw new Error(`Failed to upload: ${file.name}`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Failed to upload: ${file.name}`);
+        }
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : `Failed to upload: ${file.name}`,
-        );
+        setError(err instanceof Error ? err.message : `Failed to upload: ${file.name}`);
       }
     }
 
     await loadData();
     setUploadingFile(false);
-    showSuccess("Files uploaded successfully");
+    showSuccess('Files uploaded successfully');
   };
 
   const handleDeleteFile = async (fileId: number) => {
@@ -629,72 +620,122 @@ export default function AdminPanel({
     }
 
     setSaving(true);
-    try {
-      const url = editingButton
-        ? `/api/sidebar-buttons/${editingButton.id}`
-        : "/api/sidebar-buttons";
-      const method = editingButton ? "PUT" : "POST";
+    // Optimistic update: prepare new or updated button locally
+    if (!editingButton) {
+      const tempId = `temp-${Date.now()}`;
+      const newButton: any = {
+        id: tempId,
+        button_id: buttonForm.button_id,
+        label: buttonForm.label,
+        folder_id: buttonForm.folder_id,
+        source_type: buttonForm.source_type || 'drive',
+        is_enabled: buttonForm.is_enabled,
+        order_index: buttonForm.order_index,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buttonForm),
-      });
+      // apply optimistic UI
+      setSidebarButtons((prev) => [newButton, ...prev]);
+      setShowButtonForm(false);
 
-      if (res.ok) {
-        setShowButtonForm(false);
-        await loadData();
-        onSidebarUpdate?.(); // Refresh sidebar menu
-        showSuccess(editingButton ? "Button updated" : "Button created");
-      } else {
-        throw new Error(
-          editingButton ? "Failed to update button" : "Failed to create button",
-        );
+      try {
+        const res = await fetch('/api/sidebar-buttons', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            button_id: buttonForm.button_id,
+            label: buttonForm.label,
+            folder_id: buttonForm.folder_id,
+            source_type: buttonForm.source_type || 'drive',
+            is_enabled: buttonForm.is_enabled,
+            order_index: buttonForm.order_index,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Create failed');
+        const data = await res.json();
+        // replace temp with server row
+        setSidebarButtons((prev) => prev.map((b) => (b.id === tempId ? data.button : b)));
+        onSidebarUpdate?.();
+        showSuccess('Button created');
+      } catch (err) {
+        // rollback
+        setSidebarButtons((prev) => prev.filter((b) => b.id !== tempId));
+        setError(err instanceof Error ? err.message : 'Failed to create button');
+      } finally {
+        setSaving(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save button");
-    } finally {
-      setSaving(false);
+    } else {
+      // editing existing
+      const prevButtons = sidebarButtons.slice();
+      // optimistic update in-place
+      setSidebarButtons((prev) => prev.map((b) => (b.id === editingButton.id ? { ...b, label: buttonForm.label, folder_id: buttonForm.folder_id, source_type: buttonForm.source_type || 'drive', is_enabled: buttonForm.is_enabled, order_index: buttonForm.order_index, updated_at: new Date().toISOString() } : b)));
+      setShowButtonForm(false);
+
+      try {
+        const res = await fetch(`/api/sidebar-buttons/${editingButton.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            button_id: buttonForm.button_id,
+            label: buttonForm.label,
+            folder_id: buttonForm.folder_id,
+            source_type: buttonForm.source_type || 'drive',
+            is_enabled: buttonForm.is_enabled,
+            order_index: buttonForm.order_index,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Update failed');
+        const data = await res.json();
+        // reconcile with server response
+        setSidebarButtons((prev) => prev.map((b) => (b.id === editingButton.id ? data.button : b)));
+        onSidebarUpdate?.();
+        showSuccess('Button updated');
+      } catch (err) {
+        // rollback
+        setSidebarButtons(prevButtons);
+        setError(err instanceof Error ? err.message : 'Failed to update button');
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
   const handleDeleteButton = async (buttonId: number) => {
     if (!confirm("Are you sure you want to delete this button?")) return;
+    // optimistic delete locally
+    const previous = sidebarButtons.slice();
+    setSidebarButtons((prev) => prev.filter((b) => b.id !== buttonId));
     try {
-      const res = await fetch(`/api/sidebar-buttons/${buttonId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        await loadData();
-        onSidebarUpdate?.(); // Refresh sidebar menu
-        showSuccess("Button deleted");
-      } else {
-        throw new Error("Failed to delete button");
-      }
+      const res = await fetch(`/api/sidebar-buttons/${buttonId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error || 'Delete failed');
+      onSidebarUpdate?.(); // Refresh sidebar menu
+      showSuccess('Button deleted');
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete button");
+      // rollback
+      setSidebarButtons(previous);
+      setError(err instanceof Error ? err.message : 'Failed to delete button');
     }
   };
 
   const handleToggleButton = async (button: SidebarButton) => {
+    // optimistic toggle
+    const previous = sidebarButtons.slice();
+    setSidebarButtons((prev) => prev.map((b) => (b.id === button.id ? { ...b, is_enabled: !b.is_enabled } : b)));
     try {
       const res = await fetch(`/api/sidebar-buttons/${button.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_enabled: !button.is_enabled }),
       });
-
-      if (res.ok) {
-        await loadData();
-        onSidebarUpdate?.(); // Refresh sidebar menu
-        showSuccess(button.is_enabled ? "Button disabled" : "Button enabled");
-      } else {
-        throw new Error("Failed to update button status");
-      }
+      if (!res.ok) throw new Error((await res.json()).error || 'Update failed');
+      const data = await res.json();
+      setSidebarButtons((prev) => prev.map((b) => (b.id === button.id ? data.button : b)));
+      onSidebarUpdate?.(); // Refresh sidebar menu
+      showSuccess(button.is_enabled ? 'Button disabled' : 'Button enabled');
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to update button status",
-      );
+      setSidebarButtons(previous);
+      setError(err instanceof Error ? err.message : 'Failed to update button status');
     }
   };
 
@@ -2751,470 +2792,20 @@ export default function AdminPanel({
             )}
 
             {activeTab === "map_config" && (
-              <div className="space-y-6">
-                {showMapConfigForm ? (
-                  <div className="bg-white p-6 rounded-xl shadow-lg border border-white/50">
-                    <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-xl font-bold text-gray-800">
-                        {editingMapConfig
-                          ? "Edit Map Configuration"
-                          : "Create New Map Configuration"}
-                      </h3>
-                      <button
-                        onClick={() => setShowMapConfigForm(false)}
-                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full"
-                      >
-                        <X size={20} />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Config Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={mapConfigForm.config_name}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              config_name: e.target.value,
-                            })
-                          }
-                          placeholder="default"
-                          disabled={!!editingMapConfig}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition disabled:bg-gray-100"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Default Zoom
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="20"
-                          value={mapConfigForm.default_zoom}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              default_zoom: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Description
-                        </label>
-                        <textarea
-                          value={mapConfigForm.description}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              description: e.target.value,
-                            })
-                          }
-                          rows={2}
-                          placeholder="Configuration description..."
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Default Center Latitude
-                        </label>
-                        <input
-                          type="number"
-                          step="0.000001"
-                          value={mapConfigForm.default_center_lat}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              default_center_lat: parseFloat(e.target.value),
-                            })
-                          }
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Default Center Longitude
-                        </label>
-                        <input
-                          type="number"
-                          step="0.000001"
-                          value={mapConfigForm.default_center_lng}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              default_center_lng: parseFloat(e.target.value),
-                            })
-                          }
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Min Zoom
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="20"
-                          value={mapConfigForm.min_zoom}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              min_zoom: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Max Zoom
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="20"
-                          value={mapConfigForm.max_zoom}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              max_zoom: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Reference Circle Radius (meters)
-                        </label>
-                        <input
-                          type="number"
-                          value={mapConfigForm.reference_circle_radius}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              reference_circle_radius: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Reference Circle Color
-                        </label>
-                        <input
-                          type="color"
-                          value={mapConfigForm.reference_circle_color}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              reference_circle_color: e.target.value,
-                            })
-                          }
-                          className="w-full h-12 px-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Max File Size (MB)
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={mapConfigForm.max_file_size_mb}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              max_file_size_mb: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Tile Layer URL
-                        </label>
-                        <input
-                          type="text"
-                          value={mapConfigForm.tile_layer_url}
-                          onChange={(e) =>
-                            setMapConfigForm({
-                              ...mapConfigForm,
-                              tile_layer_url: e.target.value,
-                            })
-                          }
-                          placeholder="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-sm"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked={mapConfigForm.enable_location_marker}
-                            onChange={(e) =>
-                              setMapConfigForm({
-                                ...mapConfigForm,
-                                enable_location_marker: e.target.checked,
-                              })
-                            }
-                            className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                          />
-                          <span className="text-sm font-semibold text-gray-700">
-                            Enable Location Marker
-                          </span>
-                        </label>
-
-                        <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked={mapConfigForm.enable_reference_circle}
-                            onChange={(e) =>
-                              setMapConfigForm({
-                                ...mapConfigForm,
-                                enable_reference_circle: e.target.checked,
-                              })
-                            }
-                            className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                          />
-                          <span className="text-sm font-semibold text-gray-700">
-                            Enable Reference Circle
-                          </span>
-                        </label>
-
-                        <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked={mapConfigForm.is_active}
-                            onChange={(e) =>
-                              setMapConfigForm({
-                                ...mapConfigForm,
-                                is_active: e.target.checked,
-                              })
-                            }
-                            className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                          />
-                          <span className="text-sm font-semibold text-gray-700">
-                            Set as Active Config
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3 mt-8">
-                      <button
-                        onClick={handleSaveMapConfig}
-                        disabled={saving}
-                        className="px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {saving ? (
-                          <>
-                            <RefreshCw className="animate-spin" size={18} />
-                            Saving...
-                          </>
-                        ) : (
-                          "Save Configuration"
-                        )}
-                      </button>
-                      <button
-                        onClick={() => setShowMapConfigForm(false)}
-                        className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-                      <div>
-                        <h2 className="text-2xl font-bold text-gray-800">
-                          Map Configuration
-                        </h2>
-                        <p className="text-gray-600">
-                          Configure settings for the Interactive Map component
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleCreateMapConfig}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg"
-                      >
-                        <Plus size={18} />
-                        Create Config
-                      </button>
-                    </div>
-
-                    {mapConfigs.length === 0 ? (
-                      <div className="bg-white rounded-xl shadow-sm border border-dashed border-gray-300 p-12 text-center">
-                        <Map className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                          No map configurations yet
-                        </h3>
-                        <p className="text-gray-500 mb-4">
-                          Create your first map configuration to customize the
-                          interactive map
-                        </p>
-                        <button
-                          onClick={handleCreateMapConfig}
-                          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
-                        >
-                          Create Configuration
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                        <div className="space-y-4">
-                          {mapConfigs.map((config) => (
-                            <div
-                              key={config.id}
-                              className={`border rounded-xl p-5 transition-all ${
-                                config.is_active
-                                  ? "border-green-300 bg-green-50"
-                                  : "border-gray-200 hover:border-gray-300"
-                              }`}
-                            >
-                              <div className="flex justify-between items-start mb-4">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-3">
-                                    <h3 className="font-bold text-gray-900 text-lg">
-                                      {config.config_name}
-                                    </h3>
-                                    {config.is_active && (
-                                      <span className="px-2.5 py-1 bg-green-500 text-white text-xs rounded-full font-medium">
-                                        Active
-                                      </span>
-                                    )}
-                                  </div>
-                                  {config.description && (
-                                    <p className="text-sm text-gray-600 mt-1">
-                                      {config.description}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() =>
-                                      handleToggleMapConfigActive(config)
-                                    }
-                                    className={`p-2 rounded-lg transition ${
-                                      config.is_active
-                                        ? "bg-yellow-100 hover:bg-yellow-200 text-yellow-700"
-                                        : "bg-green-100 hover:bg-green-200 text-green-700"
-                                    }`}
-                                    title={
-                                      config.is_active
-                                        ? "Deactivate"
-                                        : "Activate"
-                                    }
-                                  >
-                                    {config.is_active ? (
-                                      <EyeOff size={16} />
-                                    ) : (
-                                      <Eye size={16} />
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={() => handleEditMapConfig(config)}
-                                    className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition"
-                                    title="Edit"
-                                  >
-                                    <Edit2 size={16} />
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleDeleteMapConfig(config.id)
-                                    }
-                                    className="p-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition"
-                                    title="Delete"
-                                  >
-                                    <Trash2 size={16} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                <div className="bg-white p-3 rounded-lg">
-                                  <p className="text-gray-500 text-xs mb-1">
-                                    Center
-                                  </p>
-                                  <p className="font-semibold text-gray-900">
-                                    {Number(config.default_center_lat).toFixed(4)},{" "}
-                                    {Number(config.default_center_lng).toFixed(4)}
-                                  </p>
-                                </div>
-                                <div className="bg-white p-3 rounded-lg">
-                                  <p className="text-gray-500 text-xs mb-1">
-                                    Zoom
-                                  </p>
-                                  <p className="font-semibold text-gray-900">
-                                    {config.default_zoom} ({config.min_zoom}-
-                                    {config.max_zoom})
-                                  </p>
-                                </div>
-                                <div className="bg-white p-3 rounded-lg">
-                                  <p className="text-gray-500 text-xs mb-1">
-                                    Circle Radius
-                                  </p>
-                                  <p className="font-semibold text-gray-900">
-                                    {config.reference_circle_radius}m
-                                  </p>
-                                </div>
-                                <div className="bg-white p-3 rounded-lg">
-                                  <p className="text-gray-500 text-xs mb-1">
-                                    Max File Size
-                                  </p>
-                                  <p className="font-semibold text-gray-900">
-                                    {config.max_file_size_mb} MB
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="mt-3 flex gap-3 text-xs">
-                                {config.enable_location_marker && (
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                                    Location Marker
-                                  </span>
-                                )}
-                                {config.enable_reference_circle && (
-                                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded">
-                                    Reference Circle
-                                  </span>
-                                )}
-                                <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
-                                  {config.allowed_file_types.join(", ")}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+              <MapConfigTab
+                mapConfigs={mapConfigs}
+                showMapConfigForm={showMapConfigForm}
+                setShowMapConfigForm={setShowMapConfigForm}
+                editingMapConfig={editingMapConfig}
+                mapConfigForm={mapConfigForm}
+                setMapConfigForm={setMapConfigForm}
+                onCreateMapConfig={handleCreateMapConfig}
+                onEditMapConfig={handleEditMapConfig}
+                onSaveMapConfig={handleSaveMapConfig}
+                onDeleteMapConfig={handleDeleteMapConfig}
+                onToggleMapConfigActive={handleToggleMapConfigActive}
+                saving={saving}
+              />
             )}
 
             {activeTab === "settings" && (

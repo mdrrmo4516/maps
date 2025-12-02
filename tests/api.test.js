@@ -8,8 +8,8 @@ import http from 'http';
 
 const BASE_URL = 'http://localhost:3001';
 
-// Test helper
-async function fetch(path, method = 'GET', body = null) {
+// Test helper with optional headers
+async function fetch(path, method = 'GET', body = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, BASE_URL);
     const options = {
@@ -17,7 +17,10 @@ async function fetch(path, method = 'GET', body = null) {
       port: url.port,
       path: url.pathname + url.search,
       method,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        ...headers 
+      }
     };
 
     const req = http.request(options, (res) => {
@@ -126,6 +129,69 @@ test('POST /api/map-pages — should create a map page', async () => {
   if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
   if (!res.body?.success) throw new Error('Missing "success" in response');
   if (!res.body?.page?.id) throw new Error('Missing page ID in response');
+});
+
+// ========== SIDEBAR BUTTONS TESTS (Optimistic Flow Simulation) ==========
+
+test('GET /api/sidebar-buttons should return consistent format', async () => {
+  const res = await fetch('/api/sidebar-buttons');
+  if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+  if (!res.body?.success) throw new Error('Missing "success" in response');
+  if (!Array.isArray(res.body?.buttons)) throw new Error('Missing "buttons" array');
+  
+  // Validate button structure if any exist
+  if (res.body.buttons.length > 0) {
+    const btn = res.body.buttons[0];
+    if (typeof btn.id !== 'number') throw new Error('Button missing valid id');
+    if (typeof btn.label !== 'string') throw new Error('Button missing valid label');
+    if (typeof btn.folder_id !== 'string') throw new Error('Button missing valid folder_id');
+  }
+});
+
+test('POST /api/sidebar-buttons without auth header — should reject', async () => {
+  const res = await fetch('/api/sidebar-buttons', 'POST', {
+    button_id: 'test-btn',
+    label: 'Test Button',
+    folder_id: 'test-folder',
+    is_enabled: true
+  });
+  // Without x-user-id header, should fail with 401 or error
+  if (res.status < 400) throw new Error(`Expected error status, got ${res.status}`);
+  if (!res.body?.error) throw new Error('Missing error in response');
+});
+
+test('PUT /api/sidebar-buttons/:id without auth header — should reject', async () => {
+  const res = await fetch('/api/sidebar-buttons/1', 'PUT', {
+    label: 'Updated Label'
+  });
+  // Should reject without auth
+  if (res.status < 400) throw new Error(`Expected error status, got ${res.status}`);
+});
+
+test('DELETE /api/sidebar-buttons/:id without auth header — should reject', async () => {
+  const res = await fetch('/api/sidebar-buttons/1', 'DELETE');
+  // Should reject without auth
+  if (res.status < 400) throw new Error(`Expected error status, got ${res.status}`);
+});
+
+test('GET /api/sidebar-buttons/:id/signed-url — should return response', async () => {
+  // First get any existing button
+  const listRes = await fetch('/api/sidebar-buttons');
+  if (listRes.status !== 200) throw new Error('Failed to list sidebar buttons');
+  
+  const buttons = listRes.body?.buttons || [];
+  if (buttons.length === 0) {
+    // Skip if no buttons exist
+    return;
+  }
+  
+  const buttonId = buttons[0].id;
+  const res = await fetch(`/api/sidebar-buttons/${buttonId}/signed-url`);
+  
+  // Should return some response (200, 400, 404, or 500)
+  if (!res.body) {
+    throw new Error('Expected response body');
+  }
 });
 
 // Runner

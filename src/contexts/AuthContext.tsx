@@ -7,8 +7,8 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   isConfigured: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -22,45 +22,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isConfigured) {
+      console.warn('Supabase is not configured. Auth features will be unavailable.');
       setLoading(false);
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // Get initial session
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('Failed to get session:', error);
+        }
+        setSession(session);
+        setUser(session?.user ?? null);
+      } catch (err) {
+        console.error('Error initializing auth:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    initializeAuth();
+
+    // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe();
   }, [isConfigured]);
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    if (!isConfigured) {
+      throw new Error('Supabase is not configured');
+    }
+
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
-    return { error };
+
+    if (error) {
+      throw new Error(error.message || 'Failed to sign up');
+    }
+
+    // Session might not be set immediately for signUp, user confirmation may be required
+    if (data.session) {
+      setSession(data.session);
+      setUser(data.user);
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    if (!isConfigured) {
+      throw new Error('Supabase is not configured');
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    return { error };
+
+    if (error) {
+      throw new Error(error.message || 'Failed to sign in');
+    }
+
+    if (data.session) {
+      setSession(data.session);
+      setUser(data.user);
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    if (!isConfigured) {
+      return;
+    }
+
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Sign out error:', error);
+    }
     setUser(null);
     setSession(null);
   };

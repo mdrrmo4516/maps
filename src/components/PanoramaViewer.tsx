@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { RotateCcw, ZoomIn, ZoomOut, Loader, X, Info, Maximize } from "lucide-react";
-import { ReactPhotoSphereViewer } from "react-photo-sphere-viewer";
-import "photo-sphere-viewer/dist/photo-sphere-viewer.css";
+import * as THREE from "three";
 
 interface Location {
   name: string;
@@ -16,16 +15,15 @@ const locations: Location[] = [
   {
     name: "Site A - Main Plaza",
     id: "site-a",
-    imageUrl: "/Panorama.jpg",
+    imageUrl: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=2000&h=1000&fit=crop",
     description: "Central gathering area with emergency exits marked",
     coordinates: { lat: 13.1388, lng: 123.7336 },
-    features: ["Emergency Exits", "First Aid Stations", "Communication Hub"]
+    features: ["Emergency Exits", "First Aid Stations", "Communication Hub"],
   },
   {
     name: "Site B - Emergency Center",
     id: "site-b",
-    imageUrl:
-      "https://placehold.co/2000x1000/7e22ce/white?text=Emergency+Center+Operations+Room",
+    imageUrl: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=2000&h=1000&fit=crop",
     description: "Command and control hub for emergency response",
     coordinates: { lat: 13.1400, lng: 123.7350 },
     features: ["Control Room", "Radio Equipment", "Backup Power"]
@@ -33,8 +31,7 @@ const locations: Location[] = [
   {
     name: "Site C - Evacuation Point",
     id: "site-c",
-    imageUrl:
-      "https://placehold.co/2000x1000/0d9488/white?text=Evacuation+Point+Assembly+Area",
+    imageUrl: "https://images.unsplash.com/photo-1511593358241-7eea1f3c84e5?w=2000&h=1000&fit=crop",
     description: "Designated safe zone for personnel assembly",
     coordinates: { lat: 13.1375, lng: 123.7320 },
     features: ["Shelter Area", "Water Supply", "Medical Tent"]
@@ -50,79 +47,212 @@ export default function PanoramaViewer() {
   const [zoomLevel, setZoomLevel] = useState<number>(50);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  const viewerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const sphereRef = useRef<THREE.Mesh | null>(null);
+  const isDraggingRef = useRef(false);
+  const previousMousePositionRef = useRef({ x: 0, y: 0 });
+  const lonRef = useRef(0);
+  const latRef = useRef(0);
+  const phiRef = useRef(0);
+  const thetaRef = useRef(0);
+  const animationFrameRef = useRef<number>();
 
   const currentLocation = locations.find((l) => l.id === selectedLocation)!;
 
-  const handleViewerReady = (viewer: any) => {
-    viewerRef.current = viewer;
-    setIsLoading(false);
-    setError(null);
-    
-    // Set up zoom level listener
-    viewer.on('zoom-updated', (e: any, zoom: number) => {
-      setZoomLevel(Math.round(zoom * 100));
-    });
-  };
+  // Initialize Three.js scene
+  useEffect(() => {
+    if (!containerRef.current) return;
 
-  const handleViewerError = (error: any) => {
-    console.error("Panorama viewer error:", error);
-    setError("Failed to load panorama image. Please try again.");
-    setIsLoading(false);
-  };
+    // Scene setup
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
+
+    // Camera setup
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      containerRef.current.clientWidth / containerRef.current.clientHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(0, 0, 0.1);
+    cameraRef.current = camera;
+
+    // Renderer setup
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+    containerRef.current.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
+
+    // Create sphere geometry (inverted for inside view)
+    const geometry = new THREE.SphereGeometry(500, 60, 40);
+    geometry.scale(-1, 1, 1); // Invert the sphere
+
+    // Load texture
+    const textureLoader = new THREE.TextureLoader();
+    setIsLoading(true);
+    setError(null);
+
+    textureLoader.load(
+      currentLocation.imageUrl,
+      (texture: THREE.Texture) => {
+        const material = new THREE.MeshBasicMaterial({ map: texture });
+        const sphere = new THREE.Mesh(geometry, material);
+        scene.add(sphere);
+        sphereRef.current = sphere;
+        setIsLoading(false);
+      },
+      undefined,
+      (err: unknown) => {
+        console.error("Error loading texture:", err);
+        setError("Failed to load panorama image. Please try again.");
+        setIsLoading(false);
+      }
+    );
+
+    // Animation loop
+    const animate = () => {
+      animationFrameRef.current = requestAnimationFrame(animate);
+
+      latRef.current = Math.max(-85, Math.min(85, latRef.current));
+      phiRef.current = THREE.MathUtils.degToRad(90 - latRef.current);
+      thetaRef.current = THREE.MathUtils.degToRad(lonRef.current);
+
+      camera.position.x = 100 * Math.sin(phiRef.current) * Math.cos(thetaRef.current);
+      camera.position.y = 100 * Math.cos(phiRef.current);
+      camera.position.z = 100 * Math.sin(phiRef.current) * Math.sin(thetaRef.current);
+      camera.lookAt(scene.position);
+
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Handle window resize
+    const handleResize = () => {
+      if (!containerRef.current || !camera || !renderer) return;
+      camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
+    // Mouse/touch events
+    const handleMouseDown = (e: MouseEvent | TouchEvent) => {
+      isDraggingRef.current = true;
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+      previousMousePositionRef.current = { x: clientX, y: clientY };
+    };
+
+    const handleMouseMove = (e: MouseEvent | TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+      const deltaX = clientX - previousMousePositionRef.current.x;
+      const deltaY = clientY - previousMousePositionRef.current.y;
+
+      lonRef.current += deltaX * 0.1;
+      latRef.current -= deltaY * 0.1;
+
+      previousMousePositionRef.current = { x: clientX, y: clientY };
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const newFov = camera.fov + e.deltaY * 0.05;
+      camera.fov = THREE.MathUtils.clamp(newFov, 20, 100);
+      camera.updateProjectionMatrix();
+      setZoomLevel(Math.round(((100 - camera.fov) / 80) * 100));
+    };
+
+    const canvas = renderer.domElement;
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('touchstart', handleMouseDown);
+    canvas.addEventListener('touchmove', handleMouseMove);
+    canvas.addEventListener('touchend', handleMouseUp);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseup', handleMouseUp);
+      canvas.removeEventListener('touchstart', handleMouseDown);
+      canvas.removeEventListener('touchmove', handleMouseMove);
+      canvas.removeEventListener('touchend', handleMouseUp);
+      canvas.removeEventListener('wheel', handleWheel);
+      
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        containerRef.current?.removeChild(rendererRef.current.domElement);
+      }
+      if (sphereRef.current) {
+        sphereRef.current.geometry.dispose();
+        if (sphereRef.current.material instanceof THREE.Material) {
+          sphereRef.current.material.dispose();
+        }
+      }
+    };
+  }, [selectedLocation]);
 
   const handleZoomIn = () => {
-    if (viewerRef.current) {
-      const currentZoom = viewerRef.current.getZoomLevel?.();
-      if (currentZoom !== undefined) {
-        const newZoom = Math.min(100, currentZoom + 10);
-        viewerRef.current.setZoomLevel?.(newZoom);
-        setZoomLevel(Math.round(newZoom * 100));
-      }
+    if (cameraRef.current) {
+      const newFov = THREE.MathUtils.clamp(cameraRef.current.fov - 10, 20, 100);
+      cameraRef.current.fov = newFov;
+      cameraRef.current.updateProjectionMatrix();
+      setZoomLevel(Math.round(((100 - newFov) / 80) * 100));
     }
   };
 
   const handleZoomOut = () => {
-    if (viewerRef.current) {
-      const currentZoom = viewerRef.current.getZoomLevel?.();
-      if (currentZoom !== undefined) {
-        const newZoom = Math.max(0, currentZoom - 10);
-        viewerRef.current.setZoomLevel?.(newZoom);
-        setZoomLevel(Math.round(newZoom * 100));
-      }
+    if (cameraRef.current) {
+      const newFov = THREE.MathUtils.clamp(cameraRef.current.fov + 10, 20, 100);
+      cameraRef.current.fov = newFov;
+      cameraRef.current.updateProjectionMatrix();
+      setZoomLevel(Math.round(((100 - newFov) / 80) * 100));
     }
   };
 
   const handleResetView = () => {
-    if (viewerRef.current) {
-      viewerRef.current.setPitch?.(0);
-      viewerRef.current.setYaw?.(0);
-      viewerRef.current.setZoomLevel?.(50);
+    lonRef.current = 0;
+    latRef.current = 0;
+    if (cameraRef.current) {
+      cameraRef.current.fov = 75;
+      cameraRef.current.updateProjectionMatrix();
       setZoomLevel(50);
     }
   };
 
   const toggleFullscreen = () => {
-    if (!containerRef.current) return;
+    if (!containerRef.current?.parentElement) return;
+    
+    const fullscreenElement = containerRef.current.parentElement;
     
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(err => {
+      fullscreenElement.requestFullscreen().catch(err => {
         console.error(`Error attempting to enable fullscreen: ${err.message}`);
       });
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen();
     }
   };
 
-  // Handle fullscreen change events
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      setIsFullscreen(Boolean(document.fullscreenElement));
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -178,7 +308,6 @@ export default function PanoramaViewer() {
         </div>
       </div>
 
-      {/* Location Details Panel */}
       {showDetails && (
         <div className="mb-4 bg-white/80 rounded-xl p-4 shadow-inner border border-white">
           <div className="flex justify-between items-start mb-2">
@@ -221,8 +350,8 @@ export default function PanoramaViewer() {
       )}
 
       <div 
-        ref={containerRef}
         className="flex-1 rounded-2xl overflow-hidden shadow-inner bg-gray-900 relative group"
+        style={{ minHeight: '500px' }}
       >
         {isLoading && (
           <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
@@ -250,6 +379,7 @@ export default function PanoramaViewer() {
                 onClick={() => {
                   setError(null);
                   setIsLoading(true);
+                  setSelectedLocation(selectedLocation); // Trigger reload
                 }}
                 className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all font-semibold shadow-lg"
               >
@@ -259,24 +389,8 @@ export default function PanoramaViewer() {
           </div>
         )}
 
-        <ReactPhotoSphereViewer
-          src={currentLocation.imageUrl}
-          height="100%"
-          width="100%"
-          onReady={handleViewerReady}
-          onError={handleViewerError}
-          options={{
-            navbar: false,
-            defaultZoomLvl: 50,
-            minZoomLvl: 10,
-            maxZoomLvl: 100,
-            autorotate: false,
-            mousewheel: true,
-            touchmove: true,
-          }}
-        />
+        <div ref={containerRef} className="w-full h-full" />
 
-        {/* Top info panel */}
         <div className="absolute top-4 left-4 right-4 bg-black/60 backdrop-blur-sm text-white px-4 py-3 rounded-xl z-10 shadow-lg transition-all">
           <div className="flex justify-between items-start">
             <div className="max-w-[70%]">
@@ -303,7 +417,6 @@ export default function PanoramaViewer() {
           </div>
         </div>
 
-        {/* Bottom controls overlay */}
         <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
           <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-sm opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="flex items-center gap-2">
@@ -342,7 +455,6 @@ export default function PanoramaViewer() {
           </div>
         </div>
 
-        {/* Help overlay */}
         {showHelp && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
             <div className="bg-black/80 backdrop-blur-sm text-white p-6 rounded-2xl text-center max-w-md pointer-events-auto border border-white/10">
@@ -351,7 +463,7 @@ export default function PanoramaViewer() {
                 Interactive Panorama Viewer
               </h3>
               <p className="text-gray-300 mb-4">
-                Drag to look around, scroll to zoom in/out. Click and drag markers for details.
+                Drag to look around, scroll to zoom in/out. Explore the 360° environment.
               </p>
               <div className="flex gap-3 justify-center mb-4">
                 <div className="bg-white/10 px-3 py-1 rounded-full text-xs">
