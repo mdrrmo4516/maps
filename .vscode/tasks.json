@@ -27,6 +27,15 @@
 			],
 			"label": "npm: lint:fix",
 			"detail": "eslint . --fix"
+		},
+		{
+			"type": "npm",
+			"script": "lint",
+			"problemMatcher": [
+				"$eslint-compact"
+			],
+			"label": "npm: lint",
+			"detail": "eslint . --cache --max-warnings 0"
 		}
 	]
 }
