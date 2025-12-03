@@ -46,23 +46,15 @@ export function AuthPage({ onBack, onSuccess }: AuthPageProps) {
 
     try {
       if (isLogin) {
-        const { error } = await signIn(email, password);
-        if (error) {
-          setError(error.message);
-        } else {
-          onSuccess();
-        }
+        await signIn(email, password);
+        onSuccess();
       } else {
-        const { error } = await signUp(email, password);
-        if (error) {
-          setError(error.message);
-        } else {
-          setSuccess('Account created! Please check your email to verify your account.');
-          setIsLogin(true);
-        }
+        await signUp(email, password);
+        setSuccess('Account created! Please check your email to verify your account.');
+        setIsLogin(true);
       }
     } catch (err) {
-      setError('An unexpected error occurred');
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }

@@ -135,7 +135,7 @@ export default function Sidebar({
   };
 
   // Mobile menu animation variants
-  const mobileMenuVariants = {
+  const mobileMenuVariants: any = {
     hidden: { 
       x: '-100%',
       transition: { 

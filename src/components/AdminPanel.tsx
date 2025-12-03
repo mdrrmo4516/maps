@@ -109,6 +109,7 @@ export default function AdminPanel({
     button_id: "",
     label: "",
     folder_id: "",
+    source_type: 'drive',
     is_enabled: true,
     order_index: 0,
   });
@@ -483,14 +484,14 @@ export default function AdminPanel({
           const text = await file.text();
           try { geojsonData = JSON.parse(text); } catch {}
         } else if (ext === 'csv') {
-          const text = await file.text();
-          geojsonData = parseCSVToGeoJSON(text);
+          // CSV parsing could be implemented here if needed
+          // geojsonData = parseCSVToGeoJSON(text);
         }
 
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('original_name', file.name);
-        formData.append('file_type', fileType);
+        formData.append('original_name', file.name || '');
+        formData.append('file_type', fileType || '');
         formData.append('category', 'uncategorized');
         formData.append('description', '');
         formData.append('file_size', String(file.size));
@@ -655,12 +656,12 @@ export default function AdminPanel({
         if (!res.ok) throw new Error((await res.json()).error || 'Create failed');
         const data = await res.json();
         // replace temp with server row
-        setSidebarButtons((prev) => prev.map((b) => (b.id === tempId ? data.button : b)));
+        setSidebarButtons((prev) => prev.map((b) => (String(b.id) === tempId ? data.button : b)));
         onSidebarUpdate?.();
         showSuccess('Button created');
       } catch (err) {
         // rollback
-        setSidebarButtons((prev) => prev.filter((b) => b.id !== tempId));
+        setSidebarButtons((prev) => prev.filter((b) => String(b.id) !== tempId));
         setError(err instanceof Error ? err.message : 'Failed to create button');
       } finally {
         setSaving(false);

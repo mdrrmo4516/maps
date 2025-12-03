@@ -287,11 +287,6 @@ export default function PanoramaGallery({
     setViewerLoaded(true);
   };
 
-  // Handler for errors in the panorama viewer
-  const handleError = (error: any) => {
-    console.error("Panorama viewer error:", error);
-    setViewerLoaded(false);
-  };
 
   return (
     <div className="w-full h-full bg-gradient-to-br from-slate-50 to-blue-50/20 backdrop-blur-sm rounded-3xl shadow-2xl p-6 border border-white/50">
@@ -514,14 +509,8 @@ export default function PanoramaGallery({
                 height="100%"
                 width="100%"
                 onReady={handleReady}
-                onError={handleError}
                 navbar={false}
-                defaultZoomLvl={50}
-                minZoomLvl={10}
-                maxZoomLvl={100}
-                autorotate={false}
                 mousewheel={true}
-                touchmove={true}
               />
             </div>
           </div>

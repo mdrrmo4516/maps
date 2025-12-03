@@ -156,6 +156,8 @@ export interface MapConfigFormData {
   allowed_file_types: string[];
   max_file_size_mb: number;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface SidebarButtonFormData {

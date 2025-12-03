@@ -24,73 +24,7 @@ import {
   MapPin
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect } from "react";
-
-// Mock types
-interface MapConfig {
-  id: number;
-  config_name: string;
-  description: string;
-  default_center_lat: number;
-  default_center_lng: number;
-  default_zoom: number;
-  min_zoom: number;
-  max_zoom: number;
-  reference_circle_radius: number;
-  reference_circle_color: string;
-  max_file_size_mb: number;
-  tile_layer_url: string;
-  enable_location_marker: boolean;
-  enable_reference_circle: boolean;
-  is_active: boolean;
-  allowed_file_types: string[];
-}
-
-interface MapLayer {
-  id: number;
-  layer_name: string;
-  description: string;
-  file_type: string;
-  file_data: any;
-  original_filename: string;
-  file_size: number;
-  layer_color: string;
-  is_visible: boolean;
-  is_active: boolean;
-  display_order: number;
-  config_id: number;
-}
-
-interface MapConfigFormData {
-  config_name: string;
-  description: string;
-  default_center_lat: number;
-  default_center_lng: number;
-  default_zoom: number;
-  min_zoom: number;
-  max_zoom: number;
-  reference_circle_radius: number;
-  reference_circle_color: string;
-  max_file_size_mb: number;
-  tile_layer_url: string;
-  enable_location_marker: boolean;
-  enable_reference_circle: boolean;
-  is_active: boolean;
-  allowed_file_types: string[];
-}
-
-interface MapLayerFormData {
-  layer_name: string;
-  description: string;
-  file_type: string;
-  file_data: any;
-  original_filename: string;
-  file_size: number;
-  layer_color: string;
-  is_visible: boolean;
-  is_active: boolean;
-  display_order: number;
-  config_id: number | null;
-}
+import type { MapConfig, MapLayer, MapConfigFormData, MapLayerFormData } from "./types";
 
 interface MapConfigTabProps {
   mapConfigs: MapConfig[];
@@ -103,7 +37,7 @@ interface MapConfigTabProps {
   onEditMapConfig: (config: MapConfig) => void;
   onSaveMapConfig: () => void;
   onDeleteMapConfig: (id: number) => void;
-  onToggleMapConfigActive: (config: MapConfig) => void;
+  onToggleMapConfigActive: (config: MapConfig) => Promise<void>;
   saving: boolean;
 }
 
@@ -194,7 +128,9 @@ export default function MapConfigTab({
           is_visible: true,
           is_active: true,
           display_order: 0,
-          config_id: configId
+          config_id: configId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }
       ]);
     } catch (err) {
