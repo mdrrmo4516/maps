@@ -36,6 +36,7 @@ export default function ImageGallery({ folderId, title, type = 'drive', sharedLi
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [imageLoadStates, setImageLoadStates] = useState<Record<string, 'loading' | 'loaded' | 'error'>>({});
+  const [previewLoading, setPreviewLoading] = useState<boolean>(true);
 
   // Filter images based on search query
   const filteredImages = useMemo(() => {
@@ -125,6 +126,7 @@ export default function ImageGallery({ folderId, title, type = 'drive', sharedLi
   const openImageModal = (image: ImageData) => {
     setSelectedImage(image);
     // Preload the full-size image
+    setPreviewLoading(true);
     const img = new Image();
     img.src = image.url;
   };
@@ -281,7 +283,7 @@ export default function ImageGallery({ folderId, title, type = 'drive', sharedLi
                 onClick={() => openImageModal(image)}
                 onMouseEnter={() => preloadFullImage(image.url)}
               >
-                {imageLoadStates[image.id] !== 'loaded' && (
+                {(imageLoadStates[image.id] === undefined || imageLoadStates[image.id] === 'loading') && (
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
                     <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
                   </div>
@@ -289,7 +291,7 @@ export default function ImageGallery({ folderId, title, type = 'drive', sharedLi
                 <img
                   src={image.thumbnailUrl}
                   alt={image.name}
-                  className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${imageLoadStates[image.id] === 'loaded' ? 'block' : 'hidden'}`}
+                  className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${imageLoadStates[image.id] === 'loaded' || imageLoadStates[image.id] === 'error' ? 'block' : 'hidden'}`}
                   loading="lazy"
                   onLoad={() => handleImageLoad(image.id, 'loaded')}
                   onError={(e) => {
@@ -360,14 +362,18 @@ export default function ImageGallery({ folderId, title, type = 'drive', sharedLi
                 src={selectedImage.url}
                 alt={selectedImage.name}
                 className="max-w-full max-h-[70vh] sm:max-h-[80vh] object-contain rounded-2xl shadow-2xl"
+                onLoad={() => setPreviewLoading(false)}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src =
                     `https://placehold.co/800x600/333/ddd?text=Preview+Unavailable`;
+                  setPreviewLoading(false);
                 }}
               />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <Loader2 className="w-12 h-12 text-white/50 animate-spin" />
-              </div>
+              {previewLoading && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <Loader2 className="w-12 h-12 text-white/50 animate-spin" />
+                </div>
+              )}
             </div>
             <p className="text-white text-center mt-4 font-medium bg-black/50 px-4 py-3 rounded-xl max-w-2xl text-sm sm:text-base">
               {getCleanFilename(selectedImage.name)}
