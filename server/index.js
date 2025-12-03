@@ -56,6 +56,15 @@ console.log(`   Port: ${process.env.PORT || 3001}`);
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 
+// Set CSP headers to allow images, scripts, and styles from self and data URIs
+app.use((req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; img-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https:;"
+  );
+  next();
+});
+
 // Multer for handling multipart/form-data uploads (temporary files)
 const upload = multer({ dest: os.tmpdir() });
 
