@@ -9,6 +9,24 @@
 			],
 			"label": "npm: typecheck",
 			"detail": "tsc --noEmit"
+		},
+		{
+			"type": "npm",
+			"script": "clean",
+			"problemMatcher": [
+				"$eslint-compact"
+			],
+			"label": "npm: clean",
+			"detail": "rm -rf dist build .vite .tsbuildinfo node_modules/.cache"
+		},
+		{
+			"type": "npm",
+			"script": "lint:fix",
+			"problemMatcher": [
+				"$eslint-compact"
+			],
+			"label": "npm: lint:fix",
+			"detail": "eslint . --fix"
 		}
 	]
 }

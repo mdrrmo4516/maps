@@ -472,7 +472,7 @@ export default function AdminPanel({
     setError(null);
     for (const file of files) {
       const ext = file.name.split('.').pop()?.toLowerCase();
-      let fileType = ext === 'kml' ? 'kml' : ext === 'csv' ? 'csv' : (ext === 'geojson' || ext === 'json') ? 'geojson' : ext;
+      const fileType = ext === 'kml' ? 'kml' : ext === 'csv' ? 'csv' : (ext === 'geojson' || ext === 'json') ? 'geojson' : ext;
       let geojsonData: object | null = null;
 
       try {

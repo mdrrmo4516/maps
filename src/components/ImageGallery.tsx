@@ -91,7 +91,7 @@ export default function ImageGallery({ folderId, title, type = 'drive', sharedLi
           const fetchedImages = (data.files || []).map((file: any) => {
             const cleanId = file.id.trim();
             const url = `https://drive.google.com/uc?export=view&id=${cleanId}`;
-            let thumbnailUrl =
+            const thumbnailUrl =
               file.thumbnailLink?.replace(/=s\d+$/, "=s500") ||
               `https://drive.google.com/thumbnail?id=${cleanId}&sz=w500`;
 
