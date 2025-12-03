@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
+// Choose WSS when running in production or when HTTPS is enabled
+const useWSS = process.env.FORCE_WSS === 'true' || process.env.HTTPS === 'true' || process.env.NODE_ENV === 'production';
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -21,8 +24,8 @@ export default defineConfig({
     },
     middlewareMode: false,
     hmr: {
-      protocol: "ws",
-      host: "localhost",
+      protocol: useWSS ? 'wss' : 'ws',
+      host: "0.0.0.0",
       port: 5433,
     },
   },

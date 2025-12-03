@@ -542,7 +542,7 @@ export default function InteractiveMap({
     : mapConfigs.find(c => c.is_active);
   
   const defaultCenter: [number, number] = activeConfig 
-    ? [activeConfig.default_center_lat, activeConfig.default_center_lng]
+    ? [Number(activeConfig.default_center_lat), Number(activeConfig.default_center_lng)]
     : [13.037063508747957, 123.45890718599736];
   
   const defaultZoom = activeConfig?.default_zoom ?? 14;
@@ -619,7 +619,7 @@ export default function InteractiveMap({
     if (activeConfig?.enable_location_marker !== false) {
       const mainMarker = L.marker(mapCenter)
         .addTo(map)
-        .bindPopup(`Primary Location<br>Lat: ${mapCenter[0].toFixed(5)}<br>Lng: ${mapCenter[1].toFixed(5)}`)
+        .bindPopup(`Primary Location<br>Lat: ${Number(mapCenter[0]).toFixed(5)}<br>Lng: ${Number(mapCenter[1]).toFixed(5)}`)
         .openPopup();
     }
 
